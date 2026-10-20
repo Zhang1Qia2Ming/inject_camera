@@ -1,0 +1,60 @@
+# Vivado 生成目录
+*.cache/
+*.gen/
+*.hw/
+*.ip_user_files/
+*.runs/**
+!*.runs/**/
+!*.runs/**/*.bit
+*.sim/
+.Xil/
+
+# 日志和临时文件
+*.jou
+*.log
+*.str
+*.tmp
+*.backup.*
+
+# 调试探针。比特流 .bit 和 BOOT.bin 保留，随仓库上传
+*.ltx
+*.mmi
+*.sysdef
+*.xsa
+*.elf
+*.dcp
+*.pb
+*.wdf
+*.rpx
+*.vds
+
+# 编译中间文件
+*.o
+*.obj
+*.d
+*.a
+*.su
+*.map
+
+# Block Design 生成物。保留 .bd、包装 Verilog、约束和 .xci
+project_1.srcs/**/ipshared/
+project_1.srcs/**/sim/
+project_1.srcs/**/synth/
+project_1.srcs/**/ui/
+*.bda
+*.bxml
+*.hwh
+*.hwdef
+*.protoinst
+
+project_1.srcs/**/ip/**
+!project_1.srcs/**/ip/**/
+!project_1.srcs/**/ip/**/*.xci
+
+# Vitis 工作区和由 XSA 生成的平台
+vitis/.metadata/
+vitis/.analytics
+vitis/RemoteSystemsTempFiles/
+vitis/design_1_wrapper/
+**/_ide/psinit/
+**/_ide/hwspec.checksum

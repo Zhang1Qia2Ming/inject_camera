@@ -1,0 +1,7 @@
+//arch = zynqmp; split = false; format = BIN
+the_ROM_image:
+{
+	[bootloader, destination_cpu = a53-0]J:\work\minieye\test_mipi\freetech_4ch\zu4_pcie_gmsl_tx1rx1_6gloop\vitis\design_1_wrapper\export\design_1_wrapper\sw\design_1_wrapper\boot\fsbl.elf
+	[destination_device = pl]J:\work\minieye\test_mipi\freetech_4ch\zu4_pcie_gmsl_tx1rx1_6gloop\vitis\iic_test\_ide\bitstream\design_1_wrapper.bit
+	[destination_cpu = a53-0]J:\work\minieye\test_mipi\freetech_4ch\zu4_pcie_gmsl_tx1rx1_6gloop\vitis\iic_test\Debug\iic_test.elf
+}

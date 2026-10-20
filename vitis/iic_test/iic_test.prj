@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="ASCII"?>
+<sdkproject:SdkProject xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:sdkproject="http://www.xilinx.com/sdkproject" name="iic_test" location="G:/kehu/freetech/zu4ev/code/test_1_2_6ch/zu4_pcie_gmsl_tx1rx1_6gloop/vitis/iic_test" platform="F:/kehu/freetech/zu4ev/code/test_1_2_6ch/zu4_pcie_gmsl_tx1rx1_6gloop/vitis/design_1_wrapper/export/design_1_wrapper/design_1_wrapper.xpfm" platformUID="xilinx:::0.0(custom)" systemProject="iic_test_system" sysConfig="design_1_wrapper" runtime="cpp" cpu="standalone_psu_cortexa53_0" cpuInstance="psu_cortexa53_0" os="standalone" mssSignature="890329451abab237246fd18e07a3124c">
+  <configuration name="Debug" id="xilinx.gnu.arm.a53.exe.debug.82265070">
+    <configBuildOptions xsi:type="sdkproject:SdkOptions"/>
+    <lastBuildOptions xsi:type="sdkproject:SdkOptions"/>
+  </configuration>
+  <configuration name="Release" id="xilinx.gnu.arm.a53.exe.release.779179689" dirty="true">
+    <configBuildOptions xsi:type="sdkproject:SdkOptions"/>
+  </configuration>
+  <template appTemplateName="hello_world"/>
+</sdkproject:SdkProject>
