@@ -40,7 +40,7 @@ if { [string first $scripts_vivado_version $current_vivado_version] == -1 } {
 
 # The design that will be created by this Tcl script contains the following 
 # module references:
-# cout, mipi_gen
+# cout, lane_inject, lane_inject, lane_inject, mipi_gen
 
 # Please add the sources of those modules before sourcing this Tcl script.
 
@@ -171,15 +171,25 @@ proc create_root_design { parentCell } {
 
   set mipi_phy_if_1 [ create_bd_intf_port -mode Master -vlnv xilinx.com:interface:mipi_phy_rtl:1.0 mipi_phy_if_1 ]
 
+  set mipi_phy_if_2 [ create_bd_intf_port -mode Master -vlnv xilinx.com:interface:mipi_phy_rtl:1.0 mipi_phy_if_2 ]
+
   set mipi_phy_rx_6 [ create_bd_intf_port -mode Slave -vlnv xilinx.com:interface:mipi_phy_rtl:1.0 mipi_phy_rx_6 ]
+
+  set pcie_mgt [ create_bd_intf_port -mode Master -vlnv xilinx.com:interface:pcie_7x_mgt_rtl:1.0 pcie_mgt ]
+
+  set pcie_ref [ create_bd_intf_port -mode Slave -vlnv xilinx.com:interface:diff_clock_rtl:1.0 pcie_ref ]
+  set_property -dict [ list \
+   CONFIG.FREQ_HZ {100000000} \
+   ] $pcie_ref
 
 
   # Create ports
+  set pcie_rst_n [ create_bd_port -dir I pcie_rst_n ]
 
   # Create instance: axi_interconnect_0, and set properties
   set axi_interconnect_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_interconnect:2.1 axi_interconnect_0 ]
   set_property -dict [ list \
-   CONFIG.NUM_MI {6} \
+   CONFIG.NUM_MI {9} \
  ] $axi_interconnect_0
 
   # Create instance: axi_traffic_gen_0, and set properties
@@ -201,6 +211,76 @@ proc create_root_design { parentCell } {
    CONFIG.C_ATG_SYSTEM_INIT_ADDR_MIF {../../../../coe/addr.coe} \
    CONFIG.C_ATG_SYSTEM_INIT_DATA_MIF {../../../../coe/data.coe} \
  ] $axi_traffic_gen_1
+
+  # Create instance: axi_traffic_gen_2, and set properties
+  set axi_traffic_gen_2 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_traffic_gen:3.0 axi_traffic_gen_2 ]
+  set_property -dict [ list \
+   CONFIG.C_ATG_MODE {AXI4-Lite} \
+   CONFIG.C_ATG_SYSTEM_CH1_HIGH {0x44afffff} \
+   CONFIG.C_ATG_SYSTEM_CH1_LOW {0x44a00000} \
+   CONFIG.C_ATG_SYSTEM_INIT_ADDR_MIF {../../../../coe/addr.coe} \
+   CONFIG.C_ATG_SYSTEM_INIT_DATA_MIF {../../../../coe/data.coe} \
+ ] $axi_traffic_gen_2
+
+  # Create instance: axi_vdma_0, and set properties
+  set axi_vdma_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_vdma:6.3 axi_vdma_0 ]
+  set_property -dict [ list \
+   CONFIG.c_include_mm2s {1} \
+   CONFIG.c_include_mm2s_dre {0} \
+   CONFIG.c_include_s2mm {1} \
+   CONFIG.c_include_s2mm_dre {0} \
+   CONFIG.c_include_s2mm_sf {0} \
+   CONFIG.c_m_axi_mm2s_data_width {128} \
+   CONFIG.c_m_axi_s2mm_data_width {128} \
+   CONFIG.c_m_axis_mm2s_tdata_width {128} \
+   CONFIG.c_mm2s_genlock_mode {0} \
+   CONFIG.c_mm2s_linebuffer_depth {512} \
+   CONFIG.c_num_fstores {3} \
+   CONFIG.c_s2mm_genlock_mode {0} \
+   CONFIG.c_s2mm_linebuffer_depth {512} \
+   CONFIG.c_use_mm2s_fsync {1} \
+   CONFIG.c_use_s2mm_fsync {2} \
+ ] $axi_vdma_0
+
+  # Create instance: axi_vdma_1, and set properties
+  set axi_vdma_1 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_vdma:6.3 axi_vdma_1 ]
+  set_property -dict [ list \
+   CONFIG.c_include_mm2s {1} \
+   CONFIG.c_include_mm2s_dre {0} \
+   CONFIG.c_include_s2mm {1} \
+   CONFIG.c_include_s2mm_dre {0} \
+   CONFIG.c_include_s2mm_sf {0} \
+   CONFIG.c_m_axi_mm2s_data_width {128} \
+   CONFIG.c_m_axi_s2mm_data_width {128} \
+   CONFIG.c_m_axis_mm2s_tdata_width {128} \
+   CONFIG.c_mm2s_genlock_mode {0} \
+   CONFIG.c_mm2s_linebuffer_depth {512} \
+   CONFIG.c_num_fstores {3} \
+   CONFIG.c_s2mm_genlock_mode {0} \
+   CONFIG.c_s2mm_linebuffer_depth {512} \
+   CONFIG.c_use_mm2s_fsync {1} \
+   CONFIG.c_use_s2mm_fsync {2} \
+ ] $axi_vdma_1
+
+  # Create instance: axi_vdma_2, and set properties
+  set axi_vdma_2 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_vdma:6.3 axi_vdma_2 ]
+  set_property -dict [ list \
+   CONFIG.c_include_mm2s {1} \
+   CONFIG.c_include_mm2s_dre {0} \
+   CONFIG.c_include_s2mm {1} \
+   CONFIG.c_include_s2mm_dre {0} \
+   CONFIG.c_include_s2mm_sf {0} \
+   CONFIG.c_m_axi_mm2s_data_width {128} \
+   CONFIG.c_m_axi_s2mm_data_width {128} \
+   CONFIG.c_m_axis_mm2s_tdata_width {128} \
+   CONFIG.c_mm2s_genlock_mode {0} \
+   CONFIG.c_mm2s_linebuffer_depth {512} \
+   CONFIG.c_num_fstores {3} \
+   CONFIG.c_s2mm_genlock_mode {0} \
+   CONFIG.c_s2mm_linebuffer_depth {512} \
+   CONFIG.c_use_mm2s_fsync {1} \
+   CONFIG.c_use_s2mm_fsync {2} \
+ ] $axi_vdma_2
 
   # Create instance: axis_subset_converter_0, and set properties
   set axis_subset_converter_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_subset_converter:1.1 axis_subset_converter_0 ]
@@ -234,6 +314,26 @@ proc create_root_design { parentCell } {
    CONFIG.TLAST_REMAP {tlast[0]} \
    CONFIG.TUSER_REMAP {tuser[95:70],6'b0,tuser[63:16],9'b0,tuser[69:64],tuser[0]} \
  ] $axis_subset_converter_1
+
+  # Create instance: axis_subset_converter_2, and set properties
+  set axis_subset_converter_2 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_subset_converter:1.1 axis_subset_converter_2 ]
+  set_property -dict [ list \
+   CONFIG.M_HAS_TKEEP {1} \
+   CONFIG.M_HAS_TLAST {1} \
+   CONFIG.M_HAS_TREADY {1} \
+   CONFIG.M_TDATA_NUM_BYTES {21} \
+   CONFIG.M_TDEST_WIDTH {2} \
+   CONFIG.M_TUSER_WIDTH {96} \
+   CONFIG.S_HAS_TLAST {1} \
+   CONFIG.S_HAS_TREADY {1} \
+   CONFIG.S_TDATA_NUM_BYTES {6} \
+   CONFIG.S_TUSER_WIDTH {96} \
+   CONFIG.TDATA_REMAP {112'b0,tdata[47:36],2'b0,tdata[35:24],2'b0,tdata[23:12],2'b0,tdata[11:0],2'b0} \
+   CONFIG.TDEST_REMAP {2'b00} \
+   CONFIG.TKEEP_REMAP {21'b111111111111111111111} \
+   CONFIG.TLAST_REMAP {tlast[0]} \
+   CONFIG.TUSER_REMAP {tuser[95:70],6'b0,tuser[63:16],9'b0,tuser[69:64],tuser[0]} \
+ ] $axis_subset_converter_2
 
   # Create instance: clk_wiz_0, and set properties
   set clk_wiz_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:clk_wiz:6.0 clk_wiz_0 ]
@@ -283,6 +383,39 @@ proc create_root_design { parentCell } {
    CONFIG.C_PROBE4_WIDTH {22} \
  ] $ila_0
 
+  # Create instance: lane_inject_0, and set properties
+  set block_name lane_inject
+  set block_cell_name lane_inject_0
+  if { [catch {set lane_inject_0 [create_bd_cell -type module -reference $block_name $block_cell_name] } errmsg] } {
+     catch {common::send_gid_msg -ssname BD::TCL -id 2095 -severity "ERROR" "Unable to add referenced block <$block_name>. Please add the files for ${block_name}'s definition into the project."}
+     return 1
+   } elseif { $lane_inject_0 eq "" } {
+     catch {common::send_gid_msg -ssname BD::TCL -id 2096 -severity "ERROR" "Unable to referenced block <$block_name>. Please add the files for ${block_name}'s definition into the project."}
+     return 1
+   }
+  
+  # Create instance: lane_inject_1, and set properties
+  set block_name lane_inject
+  set block_cell_name lane_inject_1
+  if { [catch {set lane_inject_1 [create_bd_cell -type module -reference $block_name $block_cell_name] } errmsg] } {
+     catch {common::send_gid_msg -ssname BD::TCL -id 2095 -severity "ERROR" "Unable to add referenced block <$block_name>. Please add the files for ${block_name}'s definition into the project."}
+     return 1
+   } elseif { $lane_inject_1 eq "" } {
+     catch {common::send_gid_msg -ssname BD::TCL -id 2096 -severity "ERROR" "Unable to referenced block <$block_name>. Please add the files for ${block_name}'s definition into the project."}
+     return 1
+   }
+  
+  # Create instance: lane_inject_2, and set properties
+  set block_name lane_inject
+  set block_cell_name lane_inject_2
+  if { [catch {set lane_inject_2 [create_bd_cell -type module -reference $block_name $block_cell_name] } errmsg] } {
+     catch {common::send_gid_msg -ssname BD::TCL -id 2095 -severity "ERROR" "Unable to add referenced block <$block_name>. Please add the files for ${block_name}'s definition into the project."}
+     return 1
+   } elseif { $lane_inject_2 eq "" } {
+     catch {common::send_gid_msg -ssname BD::TCL -id 2096 -severity "ERROR" "Unable to referenced block <$block_name>. Please add the files for ${block_name}'s definition into the project."}
+     return 1
+   }
+  
   # Create instance: mipi_csi2_rx_subsyst_0, and set properties
   set mipi_csi2_rx_subsyst_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:mipi_csi2_rx_subsystem:5.1 mipi_csi2_rx_subsyst_0 ]
   set_property -dict [ list \
@@ -398,6 +531,47 @@ proc create_root_design { parentCell } {
    CONFIG.POLARITY {ACTIVE_LOW} \
  ] [get_bd_pins /mipi_csi2_tx_subsyst_1/s_axis_aresetn]
 
+  # Create instance: mipi_csi2_tx_subsyst_2, and set properties
+  set mipi_csi2_tx_subsyst_2 [ create_bd_cell -type ip -vlnv xilinx.com:ip:mipi_csi2_tx_subsystem:2.2 mipi_csi2_tx_subsyst_2 ]
+  set_property -dict [ list \
+   CONFIG.CLK_LANE_IO_LOC {AD7} \
+   CONFIG.CLK_LANE_IO_LOC_NAME {IO_L4P_T0U_N6_DBC_AD7P_64} \
+   CONFIG.C_CLK_LANE_IO_POSITION {6} \
+   CONFIG.C_CSI_AXIS_TDATA_WIDTH {168} \
+   CONFIG.C_CSI_CRC_ENABLE {true} \
+   CONFIG.C_CSI_DATATYPE {RAW12} \
+   CONFIG.C_CSI_LANES {4} \
+   CONFIG.C_CSI_PERIODIC_PATRN_LEN {1024} \
+   CONFIG.C_CSI_PERIODIC_TIME {50} \
+   CONFIG.C_CSI_PIXEL_MODE {4} \
+   CONFIG.C_DATA_LANE0_IO_POSITION {4} \
+   CONFIG.C_DATA_LANE1_IO_POSITION {2} \
+   CONFIG.C_DATA_LANE2_IO_POSITION {0} \
+   CONFIG.C_DATA_LANE3_IO_POSITION {10} \
+   CONFIG.C_DPHY_LANES {4} \
+   CONFIG.C_HS_LINE_RATE {1200} \
+   CONFIG.C_STRETCH_LINE_RATE {1500} \
+   CONFIG.DATA_LANE0_IO_LOC {AB8} \
+   CONFIG.DATA_LANE0_IO_LOC_NAME {IO_L3P_T0L_N4_AD15P_64} \
+   CONFIG.DATA_LANE1_IO_LOC {AE9} \
+   CONFIG.DATA_LANE1_IO_LOC_NAME {IO_L2P_T0L_N2_64} \
+   CONFIG.DATA_LANE2_IO_LOC {AC9} \
+   CONFIG.DATA_LANE2_IO_LOC_NAME {IO_L1P_T0L_N0_DBC_64} \
+   CONFIG.DATA_LANE3_IO_LOC {AB6} \
+   CONFIG.DATA_LANE3_IO_LOC_NAME {IO_L6P_T0U_N10_AD6P_64} \
+   CONFIG.HP_IO_BANK_SELECTION {64} \
+   CONFIG.SupportLevel {1} \
+ ] $mipi_csi2_tx_subsyst_2
+
+  set_property -dict [ list \
+   CONFIG.ASSOCIATED_BUSIF {s_axi:s_axis} \
+   CONFIG.ASSOCIATED_RESET {s_axis_aresetn} \
+ ] [get_bd_pins /mipi_csi2_tx_subsyst_2/s_axis_aclk]
+
+  set_property -dict [ list \
+   CONFIG.POLARITY {ACTIVE_LOW} \
+ ] [get_bd_pins /mipi_csi2_tx_subsyst_2/s_axis_aresetn]
+
   # Create instance: mipi_gen_0, and set properties
   set block_name mipi_gen
   set block_cell_name mipi_gen_0
@@ -422,11 +596,66 @@ proc create_root_design { parentCell } {
   # Create instance: proc_sys_reset_mipi, and set properties
   set proc_sys_reset_mipi [ create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 proc_sys_reset_mipi ]
 
+  # Create instance: proc_sys_reset_pcie, and set properties
+  set proc_sys_reset_pcie [ create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 proc_sys_reset_pcie ]
+
+  # Create instance: smartconnect_hp_0, and set properties
+  set smartconnect_hp_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect:1.0 smartconnect_hp_0 ]
+  set_property -dict [ list \
+   CONFIG.NUM_MI {1} \
+   CONFIG.NUM_SI {2} \
+ ] $smartconnect_hp_0
+
+  # Create instance: smartconnect_hp_1, and set properties
+  set smartconnect_hp_1 [ create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect:1.0 smartconnect_hp_1 ]
+  set_property -dict [ list \
+   CONFIG.NUM_MI {1} \
+   CONFIG.NUM_SI {2} \
+ ] $smartconnect_hp_1
+
+  # Create instance: smartconnect_hp_2, and set properties
+  set smartconnect_hp_2 [ create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect:1.0 smartconnect_hp_2 ]
+  set_property -dict [ list \
+   CONFIG.NUM_MI {1} \
+   CONFIG.NUM_SI {2} \
+ ] $smartconnect_hp_2
+
+  # Create instance: util_ds_buf_pcie, and set properties
+  set util_ds_buf_pcie [ create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf:2.1 util_ds_buf_pcie ]
+  set_property -dict [ list \
+   CONFIG.C_BUF_TYPE {IBUFDSGTE} \
+ ] $util_ds_buf_pcie
+
+  # Create instance: xdma_0, and set properties
+  set xdma_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:xdma:4.1 xdma_0 ]
+  set_property -dict [ list \
+   CONFIG.axi_data_width {128_bit} \
+   CONFIG.axisten_freq {250} \
+   CONFIG.enable_gen4 {true} \
+   CONFIG.pcie_blk_locn {X0Y0} \
+   CONFIG.pf0_device_id {9034} \
+   CONFIG.pf0_msi_enabled {true} \
+   CONFIG.pl_link_cap_max_link_speed {8.0_GT/s} \
+   CONFIG.pl_link_cap_max_link_width {X4} \
+   CONFIG.plltype {QPLL1} \
+   CONFIG.xdma_axi_intf_mm {AXI_Stream} \
+   CONFIG.xdma_num_usr_irq {4} \
+   CONFIG.xdma_rnum_chnl {3} \
+   CONFIG.xdma_wnum_chnl {1} \
+ ] $xdma_0
+
   # Create instance: xlconstant_1, and set properties
   set xlconstant_1 [ create_bd_cell -type ip -vlnv xilinx.com:ip:xlconstant:1.1 xlconstant_1 ]
   set_property -dict [ list \
    CONFIG.CONST_VAL {1} \
  ] $xlconstant_1
+
+  # Create instance: xlconstant_c2h, and set properties
+  set xlconstant_c2h [ create_bd_cell -type ip -vlnv xilinx.com:ip:xlconstant:1.1 xlconstant_c2h ]
+  set_property -dict [ list \
+   CONFIG.CONST_VAL {0} \
+   CONFIG.CONST_WIDTH {1} \
+ ] $xlconstant_c2h
 
   # Create instance: zynq_ultra_ps_e_0, and set properties
   set zynq_ultra_ps_e_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:zynq_ultra_ps_e:3.3 zynq_ultra_ps_e_0 ]
@@ -1765,7 +1994,7 @@ proc create_root_design { parentCell } {
    CONFIG.PSU__PROTECTION__FPD_SEGMENTS {SA:0xFD1A0000; SIZE:1280; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware      |       SA:0xFD000000; SIZE:64; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware      |       SA:0xFD010000; SIZE:64; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware      |       SA:0xFD020000; SIZE:64; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware      |       SA:0xFD030000; SIZE:64; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware      |       SA:0xFD040000; SIZE:64; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware      |       SA:0xFD050000; SIZE:64; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware      |       SA:0xFD610000; SIZE:512; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware      |       SA:0xFD5D0000; SIZE:64; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware      |      SA:0xFD1A0000 ; SIZE:1280; UNIT:KB; RegionTZ:Secure ; WrAllowed:Read/Write; subsystemId:Secure Subsystem} \
    CONFIG.PSU__PROTECTION__LOCK_UNUSED_SEGMENTS {0} \
    CONFIG.PSU__PROTECTION__LPD_SEGMENTS {SA:0xFF980000; SIZE:64; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware| SA:0xFF5E0000; SIZE:2560; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware| SA:0xFFCC0000; SIZE:64; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware| SA:0xFF180000; SIZE:768; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware| SA:0xFF410000; SIZE:640; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware| SA:0xFFA70000; SIZE:64; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware| SA:0xFF9A0000; SIZE:64; UNIT:KB; RegionTZ:Secure; WrAllowed:Read/Write; subsystemId:PMU Firmware|SA:0xFF5E0000 ; SIZE:2560; UNIT:KB; RegionTZ:Secure ; WrAllowed:Read/Write; subsystemId:Secure Subsystem|SA:0xFFCC0000 ; SIZE:64; UNIT:KB; RegionTZ:Secure ; WrAllowed:Read/Write; subsystemId:Secure Subsystem|SA:0xFF180000 ; SIZE:768; UNIT:KB; RegionTZ:Secure ; WrAllowed:Read/Write; subsystemId:Secure Subsystem|SA:0xFF9A0000 ; SIZE:64; UNIT:KB; RegionTZ:Secure ; WrAllowed:Read/Write; subsystemId:Secure Subsystem} \
-   CONFIG.PSU__PROTECTION__MASTERS {USB1:NonSecure;0|USB0:NonSecure;0|S_AXI_LPD:NA;0|S_AXI_HPC1_FPD:NA;0|S_AXI_HPC0_FPD:NA;0|S_AXI_HP3_FPD:NA;0|S_AXI_HP2_FPD:NA;0|S_AXI_HP1_FPD:NA;0|S_AXI_HP0_FPD:NA;0|S_AXI_ACP:NA;0|S_AXI_ACE:NA;0|SD1:NonSecure;1|SD0:NonSecure;0|SATA1:NonSecure;0|SATA0:NonSecure;0|RPU1:Secure;1|RPU0:Secure;1|QSPI:NonSecure;0|PMU:NA;1|PCIe:NonSecure;0|NAND:NonSecure;0|LDMA:NonSecure;1|GPU:NonSecure;1|GEM3:NonSecure;0|GEM2:NonSecure;0|GEM1:NonSecure;0|GEM0:NonSecure;0|FDMA:NonSecure;1|DP:NonSecure;0|DAP:NA;1|Coresight:NA;1|CSU:NA;1|APU:NA;1} \
+   CONFIG.PSU__PROTECTION__MASTERS {USB1:NonSecure;0|USB0:NonSecure;0|S_AXI_LPD:NA;0|S_AXI_HPC1_FPD:NA;0|S_AXI_HPC0_FPD:NA;0|S_AXI_HP3_FPD:NA;0|S_AXI_HP2_FPD:NA;1|S_AXI_HP1_FPD:NA;1|S_AXI_HP0_FPD:NA;1|S_AXI_ACP:NA;0|S_AXI_ACE:NA;0|SD1:NonSecure;1|SD0:NonSecure;0|SATA1:NonSecure;0|SATA0:NonSecure;0|RPU1:Secure;1|RPU0:Secure;1|QSPI:NonSecure;0|PMU:NA;1|PCIe:NonSecure;0|NAND:NonSecure;0|LDMA:NonSecure;1|GPU:NonSecure;1|GEM3:NonSecure;0|GEM2:NonSecure;0|GEM1:NonSecure;0|GEM0:NonSecure;0|FDMA:NonSecure;1|DP:NonSecure;0|DAP:NA;1|Coresight:NA;1|CSU:NA;1|APU:NA;1} \
    CONFIG.PSU__PROTECTION__MASTERS_TZ {GEM0:NonSecure|SD1:NonSecure|GEM2:NonSecure|GEM1:NonSecure|GEM3:NonSecure|PCIe:NonSecure|DP:NonSecure|NAND:NonSecure|GPU:NonSecure|USB1:NonSecure|USB0:NonSecure|LDMA:NonSecure|FDMA:NonSecure|QSPI:NonSecure|SD0:NonSecure} \
    CONFIG.PSU__PROTECTION__OCM_SEGMENTS {NONE} \
    CONFIG.PSU__PROTECTION__PRESUBSYSTEMS {NONE} \
@@ -1930,9 +2159,9 @@ proc create_root_design { parentCell } {
    CONFIG.PSU__USE__S_AXI_ACP {0} \
    CONFIG.PSU__USE__S_AXI_GP0 {0} \
    CONFIG.PSU__USE__S_AXI_GP1 {0} \
-   CONFIG.PSU__USE__S_AXI_GP2 {0} \
-   CONFIG.PSU__USE__S_AXI_GP3 {0} \
-   CONFIG.PSU__USE__S_AXI_GP4 {0} \
+   CONFIG.PSU__USE__S_AXI_GP2 {1} \
+   CONFIG.PSU__USE__S_AXI_GP3 {1} \
+   CONFIG.PSU__USE__S_AXI_GP4 {1} \
    CONFIG.PSU__USE__S_AXI_GP5 {0} \
    CONFIG.PSU__USE__S_AXI_GP6 {0} \
    CONFIG.PSU__USE__USB3_0_HUB {0} \
@@ -1964,22 +2193,61 @@ proc create_root_design { parentCell } {
   # Create interface connections
   connect_bd_intf_net -intf_net CLK_IN1_D_0_1 [get_bd_intf_ports CLK_200m] [get_bd_intf_pins clk_wiz_0/CLK_IN1_D]
   connect_bd_intf_net -intf_net axi_interconnect_0_M02_AXI [get_bd_intf_pins axi_interconnect_0/M02_AXI] [get_bd_intf_pins mipi_csi2_rx_subsyst_0/csirxss_s_axi]
+  connect_bd_intf_net -intf_net axi_interconnect_0_M06_AXI [get_bd_intf_pins axi_interconnect_0/M06_AXI] [get_bd_intf_pins axi_vdma_0/S_AXI_LITE]
+  connect_bd_intf_net -intf_net axi_interconnect_0_M07_AXI [get_bd_intf_pins axi_interconnect_0/M07_AXI] [get_bd_intf_pins axi_vdma_1/S_AXI_LITE]
+  connect_bd_intf_net -intf_net axi_interconnect_0_M08_AXI [get_bd_intf_pins axi_interconnect_0/M08_AXI] [get_bd_intf_pins axi_vdma_2/S_AXI_LITE]
   connect_bd_intf_net -intf_net axi_traffic_gen_0_M_AXI_LITE_CH1 [get_bd_intf_pins axi_traffic_gen_0/M_AXI_LITE_CH1] [get_bd_intf_pins mipi_csi2_tx_subsyst_0/s_axi]
   connect_bd_intf_net -intf_net axi_traffic_gen_1_M_AXI_LITE_CH1 [get_bd_intf_pins axi_traffic_gen_1/M_AXI_LITE_CH1] [get_bd_intf_pins mipi_csi2_tx_subsyst_1/s_axi]
+  connect_bd_intf_net -intf_net axi_traffic_gen_2_M_AXI_LITE_CH1 [get_bd_intf_pins axi_traffic_gen_2/M_AXI_LITE_CH1] [get_bd_intf_pins mipi_csi2_tx_subsyst_2/s_axi]
+  connect_bd_intf_net -intf_net axi_vdma_0_M_AXIS_MM2S [get_bd_intf_pins axi_vdma_0/M_AXIS_MM2S] [get_bd_intf_pins lane_inject_0/mm2s]
+  connect_bd_intf_net -intf_net axi_vdma_0_M_AXI_MM2S [get_bd_intf_pins axi_vdma_0/M_AXI_MM2S] [get_bd_intf_pins smartconnect_hp_0/S01_AXI]
+  connect_bd_intf_net -intf_net axi_vdma_0_M_AXI_S2MM [get_bd_intf_pins axi_vdma_0/M_AXI_S2MM] [get_bd_intf_pins smartconnect_hp_0/S00_AXI]
+  connect_bd_intf_net -intf_net axi_vdma_1_M_AXIS_MM2S [get_bd_intf_pins axi_vdma_1/M_AXIS_MM2S] [get_bd_intf_pins lane_inject_1/mm2s]
+  connect_bd_intf_net -intf_net axi_vdma_1_M_AXI_MM2S [get_bd_intf_pins axi_vdma_1/M_AXI_MM2S] [get_bd_intf_pins smartconnect_hp_1/S01_AXI]
+  connect_bd_intf_net -intf_net axi_vdma_1_M_AXI_S2MM [get_bd_intf_pins axi_vdma_1/M_AXI_S2MM] [get_bd_intf_pins smartconnect_hp_1/S00_AXI]
+  connect_bd_intf_net -intf_net axi_vdma_2_M_AXIS_MM2S [get_bd_intf_pins axi_vdma_2/M_AXIS_MM2S] [get_bd_intf_pins lane_inject_2/mm2s]
+  connect_bd_intf_net -intf_net axi_vdma_2_M_AXI_MM2S [get_bd_intf_pins axi_vdma_2/M_AXI_MM2S] [get_bd_intf_pins smartconnect_hp_2/S01_AXI]
+  connect_bd_intf_net -intf_net axi_vdma_2_M_AXI_S2MM [get_bd_intf_pins axi_vdma_2/M_AXI_S2MM] [get_bd_intf_pins smartconnect_hp_2/S00_AXI]
   connect_bd_intf_net -intf_net axis_subset_converter_0_M_AXIS [get_bd_intf_pins axis_subset_converter_0/M_AXIS] [get_bd_intf_pins mipi_csi2_tx_subsyst_0/s_axis]
   connect_bd_intf_net -intf_net axis_subset_converter_1_M_AXIS [get_bd_intf_pins axis_subset_converter_1/M_AXIS] [get_bd_intf_pins mipi_csi2_tx_subsyst_1/s_axis]
+  connect_bd_intf_net -intf_net axis_subset_converter_2_M_AXIS [get_bd_intf_pins axis_subset_converter_2/M_AXIS] [get_bd_intf_pins mipi_csi2_tx_subsyst_2/s_axis]
+  connect_bd_intf_net -intf_net lane_inject_0_s2mm [get_bd_intf_pins axi_vdma_0/S_AXIS_S2MM] [get_bd_intf_pins lane_inject_0/s2mm]
+  connect_bd_intf_net -intf_net lane_inject_1_s2mm [get_bd_intf_pins axi_vdma_1/S_AXIS_S2MM] [get_bd_intf_pins lane_inject_1/s2mm]
+  connect_bd_intf_net -intf_net lane_inject_2_s2mm [get_bd_intf_pins axi_vdma_2/S_AXIS_S2MM] [get_bd_intf_pins lane_inject_2/s2mm]
   connect_bd_intf_net -intf_net mipi_csi2_tx_subsyst_0_mipi_phy_if [get_bd_intf_ports mipi_phy_if_0] [get_bd_intf_pins mipi_csi2_tx_subsyst_0/mipi_phy_if]
   connect_bd_intf_net -intf_net mipi_csi2_tx_subsyst_1_mipi_phy_if [get_bd_intf_ports mipi_phy_if_1] [get_bd_intf_pins mipi_csi2_tx_subsyst_1/mipi_phy_if]
+  connect_bd_intf_net -intf_net mipi_csi2_tx_subsyst_2_mipi_phy_if [get_bd_intf_ports mipi_phy_if_2] [get_bd_intf_pins mipi_csi2_tx_subsyst_2/mipi_phy_if]
   connect_bd_intf_net -intf_net mipi_gen_0_video2 [get_bd_intf_pins axis_subset_converter_1/S_AXIS] [get_bd_intf_pins mipi_gen_0/video2]
+  connect_bd_intf_net -intf_net mipi_gen_0_video4 [get_bd_intf_pins axis_subset_converter_2/S_AXIS] [get_bd_intf_pins mipi_gen_0/video4]
   connect_bd_intf_net -intf_net mipi_gen_0_video_out [get_bd_intf_pins axis_subset_converter_0/S_AXIS] [get_bd_intf_pins mipi_gen_0/video_out]
   connect_bd_intf_net -intf_net mipi_phy_if_0_1 [get_bd_intf_ports mipi_phy_rx_6] [get_bd_intf_pins mipi_csi2_rx_subsyst_0/mipi_phy_if]
+  connect_bd_intf_net -intf_net pcie_ref_1 [get_bd_intf_ports pcie_ref] [get_bd_intf_pins util_ds_buf_pcie/CLK_IN_D]
+  connect_bd_intf_net -intf_net smartconnect_hp_0_M00_AXI [get_bd_intf_pins smartconnect_hp_0/M00_AXI] [get_bd_intf_pins zynq_ultra_ps_e_0/S_AXI_HP0_FPD]
+  connect_bd_intf_net -intf_net smartconnect_hp_1_M00_AXI [get_bd_intf_pins smartconnect_hp_1/M00_AXI] [get_bd_intf_pins zynq_ultra_ps_e_0/S_AXI_HP1_FPD]
+  connect_bd_intf_net -intf_net smartconnect_hp_2_M00_AXI [get_bd_intf_pins smartconnect_hp_2/M00_AXI] [get_bd_intf_pins zynq_ultra_ps_e_0/S_AXI_HP2_FPD]
+  connect_bd_intf_net -intf_net xdma_0_pcie_mgt [get_bd_intf_ports pcie_mgt] [get_bd_intf_pins xdma_0/pcie_mgt]
   connect_bd_intf_net -intf_net zynq_ultra_ps_e_0_M_AXI_HPM0_LPD [get_bd_intf_pins axi_interconnect_0/S00_AXI] [get_bd_intf_pins zynq_ultra_ps_e_0/M_AXI_HPM0_LPD]
 
   # Create port connections
-  connect_bd_net -net clk_wiz_0_clk_out1 [get_bd_pins clk_wiz_0/clk_out1] [get_bd_pins mipi_csi2_rx_subsyst_0/dphy_clk_200M] [get_bd_pins mipi_csi2_tx_subsyst_0/dphy_clk_200M] [get_bd_pins mipi_csi2_tx_subsyst_1/dphy_clk_200M]
-  connect_bd_net -net clk_wiz_0_clk_out2 [get_bd_pins axi_traffic_gen_0/s_axi_aclk] [get_bd_pins axi_traffic_gen_1/s_axi_aclk] [get_bd_pins axis_subset_converter_0/aclk] [get_bd_pins axis_subset_converter_1/aclk] [get_bd_pins clk_wiz_0/clk_out2] [get_bd_pins cout_0/clk] [get_bd_pins ila_0/clk] [get_bd_pins mipi_csi2_rx_subsyst_0/video_aclk] [get_bd_pins mipi_csi2_tx_subsyst_0/s_axis_aclk] [get_bd_pins mipi_csi2_tx_subsyst_1/s_axis_aclk] [get_bd_pins mipi_gen_0/clk] [get_bd_pins proc_sys_reset_mipi/slowest_sync_clk]
+  connect_bd_net -net clk_wiz_0_clk_out1 [get_bd_pins clk_wiz_0/clk_out1] [get_bd_pins mipi_csi2_rx_subsyst_0/dphy_clk_200M] [get_bd_pins mipi_csi2_tx_subsyst_0/dphy_clk_200M] [get_bd_pins mipi_csi2_tx_subsyst_1/dphy_clk_200M] [get_bd_pins mipi_csi2_tx_subsyst_2/dphy_clk_200M]
+  connect_bd_net -net clk_wiz_0_clk_out2 [get_bd_pins axi_traffic_gen_0/s_axi_aclk] [get_bd_pins axi_traffic_gen_1/s_axi_aclk] [get_bd_pins axi_traffic_gen_2/s_axi_aclk] [get_bd_pins axi_vdma_0/m_axis_mm2s_aclk] [get_bd_pins axi_vdma_1/m_axis_mm2s_aclk] [get_bd_pins axi_vdma_2/m_axis_mm2s_aclk] [get_bd_pins axis_subset_converter_0/aclk] [get_bd_pins axis_subset_converter_1/aclk] [get_bd_pins axis_subset_converter_2/aclk] [get_bd_pins clk_wiz_0/clk_out2] [get_bd_pins cout_0/clk] [get_bd_pins ila_0/clk] [get_bd_pins lane_inject_0/pix_clk] [get_bd_pins lane_inject_1/pix_clk] [get_bd_pins lane_inject_2/pix_clk] [get_bd_pins mipi_csi2_rx_subsyst_0/video_aclk] [get_bd_pins mipi_csi2_tx_subsyst_0/s_axis_aclk] [get_bd_pins mipi_csi2_tx_subsyst_1/s_axis_aclk] [get_bd_pins mipi_csi2_tx_subsyst_2/s_axis_aclk] [get_bd_pins mipi_gen_0/clk] [get_bd_pins proc_sys_reset_mipi/slowest_sync_clk]
   connect_bd_net -net clk_wiz_0_locked [get_bd_pins clk_wiz_0/locked] [get_bd_pins proc_sys_reset_mipi/dcm_locked]
   connect_bd_net -net cout_0_cnt [get_bd_pins cout_0/cnt] [get_bd_pins ila_0/probe4]
+  connect_bd_net -net lane_inject_0_frame_ok [get_bd_pins lane_inject_0/frame_ok] [get_bd_pins mipi_gen_0/tx1_frame_ok]
+  connect_bd_net -net lane_inject_0_h2c_tready [get_bd_pins lane_inject_0/h2c_tready] [get_bd_pins xdma_0/m_axis_h2c_tready_0]
+  connect_bd_net -net lane_inject_0_mm2s_fsync [get_bd_pins axi_vdma_0/mm2s_fsync] [get_bd_pins lane_inject_0/mm2s_fsync]
+  connect_bd_net -net lane_inject_0_pix_data [get_bd_pins lane_inject_0/pix_data] [get_bd_pins mipi_gen_0/tx1_pix_data]
+  connect_bd_net -net lane_inject_0_pix_valid [get_bd_pins lane_inject_0/pix_valid] [get_bd_pins mipi_gen_0/tx1_pix_valid]
+  connect_bd_net -net lane_inject_1_frame_ok [get_bd_pins lane_inject_1/frame_ok] [get_bd_pins mipi_gen_0/tx2_frame_ok]
+  connect_bd_net -net lane_inject_1_h2c_tready [get_bd_pins lane_inject_1/h2c_tready] [get_bd_pins xdma_0/m_axis_h2c_tready_1]
+  connect_bd_net -net lane_inject_1_mm2s_fsync [get_bd_pins axi_vdma_1/mm2s_fsync] [get_bd_pins lane_inject_1/mm2s_fsync]
+  connect_bd_net -net lane_inject_1_pix_data [get_bd_pins lane_inject_1/pix_data] [get_bd_pins mipi_gen_0/tx2_pix_data]
+  connect_bd_net -net lane_inject_1_pix_valid [get_bd_pins lane_inject_1/pix_valid] [get_bd_pins mipi_gen_0/tx2_pix_valid]
+  connect_bd_net -net lane_inject_2_frame_ok [get_bd_pins lane_inject_2/frame_ok] [get_bd_pins mipi_gen_0/tx4_frame_ok]
+  connect_bd_net -net lane_inject_2_h2c_tready [get_bd_pins lane_inject_2/h2c_tready] [get_bd_pins xdma_0/m_axis_h2c_tready_2]
+  connect_bd_net -net lane_inject_2_mm2s_fsync [get_bd_pins axi_vdma_2/mm2s_fsync] [get_bd_pins lane_inject_2/mm2s_fsync]
+  connect_bd_net -net lane_inject_2_pix_data [get_bd_pins lane_inject_2/pix_data] [get_bd_pins mipi_gen_0/tx4_pix_data]
+  connect_bd_net -net lane_inject_2_pix_valid [get_bd_pins lane_inject_2/pix_valid] [get_bd_pins mipi_gen_0/tx4_pix_valid]
   connect_bd_net -net mipi_csi2_rx_subsyst_0_video_out_tdata [get_bd_pins ila_0/probe0] [get_bd_pins mipi_csi2_rx_subsyst_0/video_out_tdata]
   connect_bd_net -net mipi_csi2_rx_subsyst_0_video_out_tlast [get_bd_pins ila_0/probe1] [get_bd_pins mipi_csi2_rx_subsyst_0/video_out_tlast]
   connect_bd_net -net mipi_csi2_rx_subsyst_0_video_out_tuser [get_bd_pins cout_0/tuser] [get_bd_pins ila_0/probe2] [get_bd_pins mipi_csi2_rx_subsyst_0/video_out_tuser]
@@ -1989,17 +2257,68 @@ proc create_root_design { parentCell } {
   connect_bd_net -net mipi_csi2_tx_subsyst_0_system_rst_out [get_bd_pins mipi_csi2_tx_subsyst_0/system_rst_out] [get_bd_pins mipi_csi2_tx_subsyst_1/system_rst_in]
   connect_bd_net -net mipi_csi2_tx_subsyst_0_txbyteclkhs [get_bd_pins mipi_csi2_tx_subsyst_0/txbyteclkhs] [get_bd_pins mipi_csi2_tx_subsyst_1/txbyteclkhs_in]
   connect_bd_net -net mipi_csi2_tx_subsyst_0_txclkesc_out [get_bd_pins mipi_csi2_tx_subsyst_0/txclkesc_out] [get_bd_pins mipi_csi2_tx_subsyst_1/txclkesc_in]
+  connect_bd_net -net mipi_gen_0_tx1_frame_done [get_bd_pins lane_inject_0/frame_done] [get_bd_pins mipi_gen_0/tx1_frame_done]
+  connect_bd_net -net mipi_gen_0_tx1_frame_start [get_bd_pins lane_inject_0/frame_start] [get_bd_pins mipi_gen_0/tx1_frame_start]
+  connect_bd_net -net mipi_gen_0_tx1_pix_ready [get_bd_pins lane_inject_0/pix_ready] [get_bd_pins mipi_gen_0/tx1_pix_ready]
+  connect_bd_net -net mipi_gen_0_tx2_frame_done [get_bd_pins lane_inject_1/frame_done] [get_bd_pins mipi_gen_0/tx2_frame_done]
+  connect_bd_net -net mipi_gen_0_tx2_frame_start [get_bd_pins lane_inject_1/frame_start] [get_bd_pins mipi_gen_0/tx2_frame_start]
+  connect_bd_net -net mipi_gen_0_tx2_pix_ready [get_bd_pins lane_inject_1/pix_ready] [get_bd_pins mipi_gen_0/tx2_pix_ready]
+  connect_bd_net -net mipi_gen_0_tx4_frame_done [get_bd_pins lane_inject_2/frame_done] [get_bd_pins mipi_gen_0/tx4_frame_done]
+  connect_bd_net -net mipi_gen_0_tx4_frame_start [get_bd_pins lane_inject_2/frame_start] [get_bd_pins mipi_gen_0/tx4_frame_start]
+  connect_bd_net -net mipi_gen_0_tx4_pix_ready [get_bd_pins lane_inject_2/pix_ready] [get_bd_pins mipi_gen_0/tx4_pix_ready]
+  connect_bd_net -net pcie_rst_n_1 [get_bd_ports pcie_rst_n] [get_bd_pins xdma_0/sys_rst_n]
   connect_bd_net -net proc_sys_reset_1_interconnect_aresetn [get_bd_pins axi_interconnect_0/ARESETN] [get_bd_pins proc_sys_reset_100m/interconnect_aresetn]
-  connect_bd_net -net proc_sys_reset_1_peripheral_aresetn [get_bd_pins axi_interconnect_0/M00_ARESETN] [get_bd_pins axi_interconnect_0/M01_ARESETN] [get_bd_pins axi_interconnect_0/M02_ARESETN] [get_bd_pins axi_interconnect_0/M03_ARESETN] [get_bd_pins axi_interconnect_0/M04_ARESETN] [get_bd_pins axi_interconnect_0/M05_ARESETN] [get_bd_pins axi_interconnect_0/S00_ARESETN] [get_bd_pins mipi_csi2_rx_subsyst_0/lite_aresetn] [get_bd_pins proc_sys_reset_100m/peripheral_aresetn]
-  connect_bd_net -net proc_sys_reset_mipi_peripheral_aresetn [get_bd_pins axi_traffic_gen_0/s_axi_aresetn] [get_bd_pins axi_traffic_gen_1/s_axi_aresetn] [get_bd_pins axis_subset_converter_0/aresetn] [get_bd_pins axis_subset_converter_1/aresetn] [get_bd_pins mipi_csi2_rx_subsyst_0/video_aresetn] [get_bd_pins mipi_csi2_tx_subsyst_0/s_axis_aresetn] [get_bd_pins mipi_csi2_tx_subsyst_1/s_axis_aresetn] [get_bd_pins proc_sys_reset_mipi/peripheral_aresetn]
+  connect_bd_net -net proc_sys_reset_1_peripheral_aresetn [get_bd_pins axi_interconnect_0/M00_ARESETN] [get_bd_pins axi_interconnect_0/M01_ARESETN] [get_bd_pins axi_interconnect_0/M02_ARESETN] [get_bd_pins axi_interconnect_0/M03_ARESETN] [get_bd_pins axi_interconnect_0/M04_ARESETN] [get_bd_pins axi_interconnect_0/M05_ARESETN] [get_bd_pins axi_interconnect_0/M06_ARESETN] [get_bd_pins axi_interconnect_0/M07_ARESETN] [get_bd_pins axi_interconnect_0/M08_ARESETN] [get_bd_pins axi_interconnect_0/S00_ARESETN] [get_bd_pins axi_vdma_0/axi_resetn] [get_bd_pins axi_vdma_1/axi_resetn] [get_bd_pins axi_vdma_2/axi_resetn] [get_bd_pins mipi_csi2_rx_subsyst_0/lite_aresetn] [get_bd_pins proc_sys_reset_100m/peripheral_aresetn]
+  connect_bd_net -net proc_sys_reset_mipi_peripheral_aresetn [get_bd_pins axi_traffic_gen_0/s_axi_aresetn] [get_bd_pins axi_traffic_gen_1/s_axi_aresetn] [get_bd_pins axi_traffic_gen_2/s_axi_aresetn] [get_bd_pins axis_subset_converter_0/aresetn] [get_bd_pins axis_subset_converter_1/aresetn] [get_bd_pins axis_subset_converter_2/aresetn] [get_bd_pins mipi_csi2_rx_subsyst_0/video_aresetn] [get_bd_pins mipi_csi2_tx_subsyst_0/s_axis_aresetn] [get_bd_pins mipi_csi2_tx_subsyst_1/s_axis_aresetn] [get_bd_pins mipi_csi2_tx_subsyst_2/s_axis_aresetn] [get_bd_pins proc_sys_reset_mipi/peripheral_aresetn]
+  connect_bd_net -net proc_sys_reset_mipi_peripheral_reset [get_bd_pins lane_inject_0/pix_rst] [get_bd_pins lane_inject_1/pix_rst] [get_bd_pins lane_inject_2/pix_rst] [get_bd_pins proc_sys_reset_mipi/peripheral_reset]
+  connect_bd_net -net proc_sys_reset_pcie_peripheral_aresetn [get_bd_pins proc_sys_reset_pcie/peripheral_aresetn] [get_bd_pins smartconnect_hp_0/aresetn] [get_bd_pins smartconnect_hp_1/aresetn] [get_bd_pins smartconnect_hp_2/aresetn]
+  connect_bd_net -net proc_sys_reset_pcie_peripheral_reset [get_bd_pins lane_inject_0/h2c_rst] [get_bd_pins lane_inject_1/h2c_rst] [get_bd_pins lane_inject_2/h2c_rst] [get_bd_pins proc_sys_reset_pcie/peripheral_reset]
+  connect_bd_net -net util_ds_buf_pcie_IBUF_DS_ODIV2 [get_bd_pins util_ds_buf_pcie/IBUF_DS_ODIV2] [get_bd_pins xdma_0/sys_clk]
+  connect_bd_net -net util_ds_buf_pcie_IBUF_OUT [get_bd_pins util_ds_buf_pcie/IBUF_OUT] [get_bd_pins xdma_0/sys_clk_gt]
+  connect_bd_net -net xdma_0_axi_aclk [get_bd_pins axi_vdma_0/m_axi_mm2s_aclk] [get_bd_pins axi_vdma_0/m_axi_s2mm_aclk] [get_bd_pins axi_vdma_0/s_axis_s2mm_aclk] [get_bd_pins axi_vdma_1/m_axi_mm2s_aclk] [get_bd_pins axi_vdma_1/m_axi_s2mm_aclk] [get_bd_pins axi_vdma_1/s_axis_s2mm_aclk] [get_bd_pins axi_vdma_2/m_axi_mm2s_aclk] [get_bd_pins axi_vdma_2/m_axi_s2mm_aclk] [get_bd_pins axi_vdma_2/s_axis_s2mm_aclk] [get_bd_pins lane_inject_0/h2c_clk] [get_bd_pins lane_inject_1/h2c_clk] [get_bd_pins lane_inject_2/h2c_clk] [get_bd_pins proc_sys_reset_pcie/slowest_sync_clk] [get_bd_pins smartconnect_hp_0/aclk] [get_bd_pins smartconnect_hp_1/aclk] [get_bd_pins smartconnect_hp_2/aclk] [get_bd_pins xdma_0/axi_aclk] [get_bd_pins zynq_ultra_ps_e_0/saxihp0_fpd_aclk] [get_bd_pins zynq_ultra_ps_e_0/saxihp1_fpd_aclk] [get_bd_pins zynq_ultra_ps_e_0/saxihp2_fpd_aclk]
+  connect_bd_net -net xdma_0_axi_aresetn [get_bd_pins proc_sys_reset_pcie/ext_reset_in] [get_bd_pins xdma_0/axi_aresetn]
+  connect_bd_net -net xdma_0_m_axis_h2c_tdata_0 [get_bd_pins lane_inject_0/h2c_tdata] [get_bd_pins xdma_0/m_axis_h2c_tdata_0]
+  connect_bd_net -net xdma_0_m_axis_h2c_tdata_1 [get_bd_pins lane_inject_1/h2c_tdata] [get_bd_pins xdma_0/m_axis_h2c_tdata_1]
+  connect_bd_net -net xdma_0_m_axis_h2c_tdata_2 [get_bd_pins lane_inject_2/h2c_tdata] [get_bd_pins xdma_0/m_axis_h2c_tdata_2]
+  connect_bd_net -net xdma_0_m_axis_h2c_tlast_0 [get_bd_pins lane_inject_0/h2c_tlast] [get_bd_pins xdma_0/m_axis_h2c_tlast_0]
+  connect_bd_net -net xdma_0_m_axis_h2c_tlast_1 [get_bd_pins lane_inject_1/h2c_tlast] [get_bd_pins xdma_0/m_axis_h2c_tlast_1]
+  connect_bd_net -net xdma_0_m_axis_h2c_tlast_2 [get_bd_pins lane_inject_2/h2c_tlast] [get_bd_pins xdma_0/m_axis_h2c_tlast_2]
+  connect_bd_net -net xdma_0_m_axis_h2c_tvalid_0 [get_bd_pins lane_inject_0/h2c_tvalid] [get_bd_pins xdma_0/m_axis_h2c_tvalid_0]
+  connect_bd_net -net xdma_0_m_axis_h2c_tvalid_1 [get_bd_pins lane_inject_1/h2c_tvalid] [get_bd_pins xdma_0/m_axis_h2c_tvalid_1]
+  connect_bd_net -net xdma_0_m_axis_h2c_tvalid_2 [get_bd_pins lane_inject_2/h2c_tvalid] [get_bd_pins xdma_0/m_axis_h2c_tvalid_2]
   connect_bd_net -net xlconstant_1_dout [get_bd_pins cout_0/tready] [get_bd_pins mipi_csi2_rx_subsyst_0/video_out_tready] [get_bd_pins xlconstant_1/dout]
-  connect_bd_net -net zynq_ultra_ps_e_0_pl_clk0 [get_bd_pins axi_interconnect_0/ACLK] [get_bd_pins axi_interconnect_0/M00_ACLK] [get_bd_pins axi_interconnect_0/M01_ACLK] [get_bd_pins axi_interconnect_0/M02_ACLK] [get_bd_pins axi_interconnect_0/M03_ACLK] [get_bd_pins axi_interconnect_0/M04_ACLK] [get_bd_pins axi_interconnect_0/M05_ACLK] [get_bd_pins axi_interconnect_0/S00_ACLK] [get_bd_pins mipi_csi2_rx_subsyst_0/lite_aclk] [get_bd_pins proc_sys_reset_100m/slowest_sync_clk] [get_bd_pins zynq_ultra_ps_e_0/maxihpm0_lpd_aclk] [get_bd_pins zynq_ultra_ps_e_0/pl_clk0]
+  connect_bd_net -net xlconstant_c2h_dout [get_bd_pins xdma_0/s_axis_c2h_tlast_0] [get_bd_pins xdma_0/s_axis_c2h_tvalid_0] [get_bd_pins xlconstant_c2h/dout]
+  connect_bd_net -net zynq_ultra_ps_e_0_pl_clk0 [get_bd_pins axi_interconnect_0/ACLK] [get_bd_pins axi_interconnect_0/M00_ACLK] [get_bd_pins axi_interconnect_0/M01_ACLK] [get_bd_pins axi_interconnect_0/M02_ACLK] [get_bd_pins axi_interconnect_0/M03_ACLK] [get_bd_pins axi_interconnect_0/M04_ACLK] [get_bd_pins axi_interconnect_0/M05_ACLK] [get_bd_pins axi_interconnect_0/M06_ACLK] [get_bd_pins axi_interconnect_0/M07_ACLK] [get_bd_pins axi_interconnect_0/M08_ACLK] [get_bd_pins axi_interconnect_0/S00_ACLK] [get_bd_pins axi_vdma_0/s_axi_lite_aclk] [get_bd_pins axi_vdma_1/s_axi_lite_aclk] [get_bd_pins axi_vdma_2/s_axi_lite_aclk] [get_bd_pins mipi_csi2_rx_subsyst_0/lite_aclk] [get_bd_pins proc_sys_reset_100m/slowest_sync_clk] [get_bd_pins zynq_ultra_ps_e_0/maxihpm0_lpd_aclk] [get_bd_pins zynq_ultra_ps_e_0/pl_clk0]
   connect_bd_net -net zynq_ultra_ps_e_0_pl_resetn0 [get_bd_pins proc_sys_reset_100m/ext_reset_in] [get_bd_pins proc_sys_reset_mipi/ext_reset_in] [get_bd_pins zynq_ultra_ps_e_0/pl_resetn0]
 
   # Create address segments
   assign_bd_address -offset 0x44A00000 -range 0x00001000 -target_address_space [get_bd_addr_spaces axi_traffic_gen_0/Reg1] [get_bd_addr_segs mipi_csi2_tx_subsyst_0/s_axi/Reg] -force
   assign_bd_address -offset 0x44A00000 -range 0x00001000 -target_address_space [get_bd_addr_spaces axi_traffic_gen_1/Reg1] [get_bd_addr_segs mipi_csi2_tx_subsyst_1/s_axi/Reg] -force
+  assign_bd_address -offset 0x44A00000 -range 0x00001000 -target_address_space [get_bd_addr_spaces axi_traffic_gen_2/Reg1] [get_bd_addr_segs mipi_csi2_tx_subsyst_2/s_axi/Reg] -force
+  assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces axi_vdma_0/Data_MM2S] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW] -force
+  assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces axi_vdma_0/Data_S2MM] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW] -force
+  assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces axi_vdma_1/Data_MM2S] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP3/HP1_DDR_LOW] -force
+  assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces axi_vdma_1/Data_S2MM] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP3/HP1_DDR_LOW] -force
+  assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces axi_vdma_2/Data_MM2S] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW] -force
+  assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces axi_vdma_2/Data_S2MM] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW] -force
+  assign_bd_address -offset 0x80000000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs axi_vdma_0/S_AXI_LITE/Reg] -force
+  assign_bd_address -offset 0x80020000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs axi_vdma_1/S_AXI_LITE/Reg] -force
+  assign_bd_address -offset 0x80030000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs axi_vdma_2/S_AXI_LITE/Reg] -force
   assign_bd_address -offset 0x80010000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs mipi_csi2_rx_subsyst_0/csirxss_s_axi/Reg] -force
+
+  # Exclude Address Segments
+  exclude_bd_addr_seg -target_address_space [get_bd_addr_spaces axi_vdma_0/Data_MM2S] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH]
+  exclude_bd_addr_seg -offset 0xFF000000 -range 0x01000000 -target_address_space [get_bd_addr_spaces axi_vdma_0/Data_MM2S] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP2/HP0_LPS_OCM]
+  exclude_bd_addr_seg -target_address_space [get_bd_addr_spaces axi_vdma_0/Data_S2MM] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH]
+  exclude_bd_addr_seg -offset 0xFF000000 -range 0x01000000 -target_address_space [get_bd_addr_spaces axi_vdma_0/Data_S2MM] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP2/HP0_LPS_OCM]
+  exclude_bd_addr_seg -target_address_space [get_bd_addr_spaces axi_vdma_1/Data_MM2S] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP3/HP1_DDR_HIGH]
+  exclude_bd_addr_seg -offset 0xFF000000 -range 0x01000000 -target_address_space [get_bd_addr_spaces axi_vdma_1/Data_MM2S] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP3/HP1_LPS_OCM]
+  exclude_bd_addr_seg -target_address_space [get_bd_addr_spaces axi_vdma_1/Data_S2MM] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP3/HP1_DDR_HIGH]
+  exclude_bd_addr_seg -offset 0xFF000000 -range 0x01000000 -target_address_space [get_bd_addr_spaces axi_vdma_1/Data_S2MM] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP3/HP1_LPS_OCM]
+  exclude_bd_addr_seg -target_address_space [get_bd_addr_spaces axi_vdma_2/Data_MM2S] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH]
+  exclude_bd_addr_seg -offset 0xFF000000 -range 0x01000000 -target_address_space [get_bd_addr_spaces axi_vdma_2/Data_MM2S] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP4/HP2_LPS_OCM]
+  exclude_bd_addr_seg -target_address_space [get_bd_addr_spaces axi_vdma_2/Data_S2MM] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH]
+  exclude_bd_addr_seg -offset 0xFF000000 -range 0x01000000 -target_address_space [get_bd_addr_spaces axi_vdma_2/Data_S2MM] [get_bd_addr_segs zynq_ultra_ps_e_0/SAXIGP4/HP2_LPS_OCM]
 
 
   # Restore current instance

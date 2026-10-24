@@ -1,8 +1,9 @@
 `timescale 1ns / 1ps
 
-// Two independent CSI-2 streams. Each lane has its own line/frame counter
-// and advances only on its own tready, the same way the single-lane
-// generator did. Neither lane waits for the other.
+// Three independent CSI-2 streams. Each lane has its own line/frame counter
+// and advances only on its own tready. A lane starts a frame only when
+// frame_ok is high, and image pixels come from pix_data. Embedded lines
+// and their CRC stay inside this module. No lane waits for another.
 module mipi_gen #
 (
 parameter H_Total		=	2274,
@@ -18,48 +19,98 @@ parameter BYTENUM	     =	5760
 	output             	video_out_tvalid ,
 	output       [47:0]  	video_out_tdata	 ,
 	input              video_out_tready ,
- // TX1 is green. TX2 is red. Protocol matches TX1. No shared beat.
+ input              tx1_frame_ok,
+ output             tx1_frame_start,
+ output             tx1_frame_done,
+ input       [47:0] tx1_pix_data,
+ input              tx1_pix_valid,
+ output             tx1_pix_ready,
  output             	video2_tlast	,
 	 output     [95:0]   video2_tuser	,
 	output             	video2_tvalid ,
 	output       [47:0]  	video2_tdata	 ,
-	input              video2_tready
+	input              video2_tready ,
+ input              tx2_frame_ok,
+ output             tx2_frame_start,
+ output             tx2_frame_done,
+ input       [47:0] tx2_pix_data,
+ input              tx2_pix_valid,
+ output             tx2_pix_ready,
+ output             	video4_tlast	,
+	 output     [95:0]   video4_tuser	,
+	output             	video4_tvalid ,
+	output       [47:0]  	video4_tdata	 ,
+	input              video4_tready ,
+ input              tx4_frame_ok,
+ output             tx4_frame_start,
+ output             tx4_frame_done,
+ input       [47:0] tx4_pix_data,
+ input              tx4_pix_valid,
+ output             tx4_pix_ready
 );
 mipi_gen_lane #(
 	.H_Total(H_Total), .H_Active(H_Active),
 	.V_Total(V_Total), .V_Active(V_Active),
-	.BYTENUM(BYTENUM), .COLOR(0)
+	.BYTENUM(BYTENUM)
 ) u_tx1 (
 	.clk(clk),
 	.tlast(video_out_tlast),
 	.tuser(video_out_tuser),
 	.tvalid(video_out_tvalid),
 	.tdata(video_out_tdata),
-	.tready(video_out_tready)
+	.tready(video_out_tready),
+	.frame_ok(tx1_frame_ok),
+	.frame_start(tx1_frame_start),
+	.frame_done(tx1_frame_done),
+	.pix_data(tx1_pix_data),
+	.pix_valid(tx1_pix_valid),
+	.pix_ready(tx1_pix_ready)
 );
 mipi_gen_lane #(
 	.H_Total(H_Total), .H_Active(H_Active),
 	.V_Total(V_Total), .V_Active(V_Active),
-	.BYTENUM(BYTENUM), .COLOR(1)
+	.BYTENUM(BYTENUM)
 ) u_tx2 (
 	.clk(clk),
 	.tlast(video2_tlast),
 	.tuser(video2_tuser),
 	.tvalid(video2_tvalid),
 	.tdata(video2_tdata),
-	.tready(video2_tready)
+	.tready(video2_tready),
+	.frame_ok(tx2_frame_ok),
+	.frame_start(tx2_frame_start),
+	.frame_done(tx2_frame_done),
+	.pix_data(tx2_pix_data),
+	.pix_valid(tx2_pix_valid),
+	.pix_ready(tx2_pix_ready)
+);
+mipi_gen_lane #(
+	.H_Total(H_Total), .H_Active(H_Active),
+	.V_Total(V_Total), .V_Active(V_Active),
+	.BYTENUM(BYTENUM)
+) u_tx4 (
+	.clk(clk),
+	.tlast(video4_tlast),
+	.tuser(video4_tuser),
+	.tvalid(video4_tvalid),
+	.tdata(video4_tdata),
+	.tready(video4_tready),
+	.frame_ok(tx4_frame_ok),
+	.frame_start(tx4_frame_start),
+	.frame_done(tx4_frame_done),
+	.pix_data(tx4_pix_data),
+	.pix_valid(tx4_pix_valid),
+	.pix_ready(tx4_pix_ready)
 );
 endmodule
 
-// COLOR 0: BGGR pure green. COLOR 1: BGGR pure red.
 module mipi_gen_lane #
 (
 parameter H_Total = 2274,
 parameter H_Active = 960,
 parameter V_Total = 2200,
 parameter V_Active = 2166,
-parameter BYTENUM = 5760,
-parameter COLOR = 0
+parameter BYTENUM = 5760
 )
 (
 input              clk,
@@ -67,26 +118,39 @@ output             tlast,
 output     [95:0]  tuser,
 output             tvalid,
 output     [47:0]  tdata,
-input              tready
+input              tready,
+input              frame_ok,
+output             frame_start,
+output             frame_done,
+input      [47:0]  pix_data,
+input              pix_valid,
+output             pix_ready
 );
 localparam EMB_TOP = 13'd2;
 localparam EMB_BOT = 13'd4;
 
-reg        ready_dly = 1'b0;
-reg        S1_start = 1'b0;
+reg        running = 1'b0;
 reg [15:0] S1_frm_num = 16'd1;
 reg [12:0] S1_pcnt = 13'd1, S1_lcnt = 13'd1;
 wire       S1_active = (S1_pcnt <= H_Active) && (S1_lcnt <= V_Active);
 wire       S1_sof = (S1_pcnt == 13'd1) && (S1_lcnt == 13'd1);
-// Counter moves only after this lane's core has raised tready once,
-// and only while that tready stays high. The other lane is not in this equation.
-wire       step = S1_start && tready;
+wire       frame_last = (S1_pcnt == H_Total) && (S1_lcnt == V_Total);
+// Image beats wait for a pixel. Embedded beats and blanking do not.
+wire       image_beat;
+wire       beat_ready = image_beat ? pix_valid : 1'b1;
+wire       step = running && tready && beat_ready;
+wire       arm = !running && frame_ok && tready;
 
 always @(posedge clk) begin
-	ready_dly <= tready;
-	if (!ready_dly && tready)
-		S1_start <= 1'b1;
+	if (arm)
+		running <= 1'b1;
+	else if (step && frame_last)
+		running <= frame_ok;
 end
+
+assign frame_start = arm || (step && frame_last && frame_ok);
+assign frame_done = step && frame_last;
+assign pix_ready = image_beat && running && tready;
 
 always @(posedge clk) begin
 	if (step) begin
@@ -306,9 +370,8 @@ wire [31:0] emb_csum = emb_crc ^ 32'hEDED056A;
 
 // BGGR, 4 pixels per beat. tdata[11:0] is the first pixel on the line.
 // lcnt starts at 1. Lines 1..2 are the top embedded header, lines
-// (V_Active-3)..V_Active are the bottom embedded header. The first image
-// line is a B row. TX1 puts 12'hC00 on the G sites of that row (pure green).
-// TX2 puts 12'hC00 on the R sites of the following G/R row (pure red).
+// (V_Active-3)..V_Active are the bottom embedded header. Image lines
+// copy pix_data. The first image line is lcnt 3.
 wire top_line = (S1_lcnt >= 13'd1) && (S1_lcnt <= EMB_TOP);
 wire bot_line = (S1_lcnt > (V_Active - EMB_BOT)) && (S1_lcnt <= V_Active);
 wire [9:0] grp = S1_pcnt[9:0] - 10'd1;
@@ -338,12 +401,11 @@ wire emb_beat = top_line ? ((S1_pcnt >= 13'd1) && (S1_pcnt <= 13'd122))
 wire emb_region = top_line || bot_line;
 wire [47:0] emb_data = (emb_region && emb_beat) ? {emb_p3, emb_p2, emb_p1, emb_p0}
                                                 : 48'h000000000000;
+assign image_beat = S1_active && !emb_region;
 
-wire [47:0] green_pix = S1_lcnt[0] ? 48'hC00000C00000 : 48'h000000000000;
-wire [47:0] red_pix   = S1_lcnt[0] ? 48'h000000000000 : 48'hC00000C00000;
-assign tdata  = emb_region ? emb_data : ((COLOR == 0) ? green_pix : red_pix);
+assign tdata  = emb_region ? emb_data : pix_data;
 assign tuser  = {26'b0, 6'h2c, p_byte_num, S1_frm_num, {3'b0, S1_lcnt}, 15'h0, S1_sof};
-assign tvalid = S1_active;
+assign tvalid = running && S1_active && beat_ready;
 assign tlast  = tvalid && (S1_pcnt == H_Active);
 
 endmodule

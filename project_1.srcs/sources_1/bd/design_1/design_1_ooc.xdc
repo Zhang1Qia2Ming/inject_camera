@@ -7,5 +7,6 @@
 # of Vivado)
 ################################################################################
 create_clock -name CLK_200m_clk_p -period 5 [get_ports CLK_200m_clk_p]
+create_clock -name pcie_ref_clk_p -period 10 [get_ports pcie_ref_clk_p]
 
 ################################################################################
