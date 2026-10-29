@@ -1,9 +1,14 @@
 `timescale 1ns / 1ps
 
-// Three independent CSI-2 streams. Each lane has its own line/frame counter
-// and advances only on its own tready. A lane starts a frame only when
-// frame_ok is high, and image pixels come from pix_data. Embedded lines
-// and their CRC stay inside this module. No lane waits for another.
+// Three independent CSI-2 streams. A lane starts when frame_ok is high and
+// presents tvalid without waiting for tready: the CSI-2 TX core keeps tready
+// low until it sees tvalid. Active beats then advance only on tready.
+// Blanking drives tvalid low, and the core may drop tready in that gap.
+// Waiting on tready there freezes the raster, so blanking advances on the
+// pixel clock alone. Image pixels come from pix_data. Embedded lines and
+// their CRC stay inside this module. No lane waits for another.
+// Image pixels come from pix_data. Embedded lines and their CRC stay inside
+// this module. No lane waits for another.
 module mipi_gen #
 (
 parameter H_Total		=	2274,
@@ -138,8 +143,9 @@ wire       frame_last = (S1_pcnt == H_Total) && (S1_lcnt == V_Total);
 // Image beats wait for a pixel. Embedded beats and blanking do not.
 wire       image_beat;
 wire       beat_ready = image_beat ? pix_valid : 1'b1;
-wire       step = running && tready && beat_ready;
-wire       arm = !running && frame_ok && tready;
+// tvalid is low in blanking, so tready is not a handshake there.
+wire       step = running && beat_ready && (!S1_active || tready);
+wire       arm = !running && frame_ok;
 
 always @(posedge clk) begin
 	if (arm)

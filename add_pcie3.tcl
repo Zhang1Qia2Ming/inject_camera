@@ -180,7 +180,9 @@ for {set i 0} {$i < 3} {incr i} {
     CONFIG.c_mm2s_genlock_mode {0} \
     CONFIG.c_s2mm_genlock_mode {0} \
     CONFIG.c_use_mm2s_fsync {1} \
-    CONFIG.c_use_s2mm_fsync {2} \
+    CONFIG.c_use_s2mm_fsync {1} \
+    CONFIG.c_s2mm_sof_enable {0} \
+    CONFIG.c_flush_on_fsync {0} \
     CONFIG.c_include_s2mm_sf {0} \
     CONFIG.c_include_mm2s_dre {0} \
     CONFIG.c_include_s2mm_dre {0} \
@@ -217,6 +219,7 @@ for {set i 0} {$i < 3} {incr i} {
   connect_bd_net [get_bd_pins axi_vdma_$i/m_axis_mm2s_tuser]  [get_bd_pins lane_inject_$i/mm2s_tuser]
   connect_bd_net [get_bd_pins lane_inject_$i/mm2s_tready] [get_bd_pins axi_vdma_$i/m_axis_mm2s_tready]
   connect_bd_net [get_bd_pins lane_inject_$i/mm2s_fsync] [get_bd_pins axi_vdma_$i/mm2s_fsync]
+  connect_bd_net [get_bd_pins lane_inject_$i/s2mm_fsync] [get_bd_pins axi_vdma_$i/s2mm_fsync]
 
   set name [lindex $lanes $i]
   connect_bd_net [get_bd_pins lane_inject_$i/frame_ok]    [get_bd_pins mipi_gen_0/${name}_frame_ok]

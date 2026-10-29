@@ -53,12 +53,113 @@ module lane_inject #(
 	output             frame_ok,
 	input              frame_start,
 	input              frame_done,
-	output             mm2s_fsync
+	output             mm2s_fsync,
+	output             s2mm_fsync,
+	input              dbg_fsync_en,
+	input              dbg_fsync,
+	output     [47:0]  dbg_bus
 );
 	wire wr_ready;
 	wire wr_start;
 	wire wr_done;
 	wire wr_abort;
+	wire slot_fsync;
+	// One fsync per frame. VDMA has FLUSH_ON_FSYNC, so a second pulse while
+	// the read is still running aborts MM2S. The image line then never sees
+	// pix_valid, frame_done never comes, and this lane stops after 3 writes.
+	assign mm2s_fsync = slot_fsync;
+
+	// Buffer the first H2C beat before arming S2MM. Some XDMA revisions do not
+	// assert tvalid until the sink advertises tready, so waiting for tvalid
+	// while holding tready low deadlocks. The buffered beat is not forwarded
+	// until 16 clocks after fsync.
+	localparam H2C_IDLE = 2'd0;
+	localparam H2C_WAIT_ARM = 2'd1;
+	localparam H2C_FIRST = 2'd2;
+	localparam H2C_STREAM = 2'd3;
+
+	reg        in_frame = 1'b0;
+	reg [1:0]  h2c_state = H2C_IDLE;
+	reg [9:0]  arm_cnt = 10'd0;
+	reg        auto_s2mm_fsync = 1'b0;
+	reg [127:0] first_tdata = 128'd0;
+	reg         first_tlast = 1'b0;
+	wire        adapt_h2c_tready;
+	(* ASYNC_REG = "TRUE" *) reg [1:0] dbg_fsync_en_sync = 2'b00;
+	(* ASYNC_REG = "TRUE" *) reg [1:0] dbg_fsync_sync = 2'b00;
+	assign s2mm_fsync =
+		dbg_fsync_en_sync[1] ? dbg_fsync_sync[1] : auto_s2mm_fsync;
+	assign dbg_bus = {
+		22'd0, arm_cnt, in_frame, wr_abort, wr_done, wr_start, wr_ready,
+		s2mm_tuser, s2mm_tlast, s2mm_tvalid, h2c_tready, h2c_tvalid,
+		s2mm_tready, auto_s2mm_fsync, s2mm_fsync, dbg_fsync_sync[1],
+		dbg_fsync_en_sync[1], h2c_rst
+	};
+	always @(posedge h2c_clk) begin
+		if (h2c_rst) begin
+			in_frame <= 1'b0;
+			h2c_state <= H2C_IDLE;
+			arm_cnt <= 10'd0;
+			auto_s2mm_fsync <= 1'b0;
+			first_tdata <= 128'd0;
+			first_tlast <= 1'b0;
+			dbg_fsync_en_sync <= 2'b00;
+			dbg_fsync_sync <= 2'b00;
+		end else begin
+			dbg_fsync_en_sync <= {dbg_fsync_en_sync[0], dbg_fsync_en};
+			dbg_fsync_sync <= {dbg_fsync_sync[0], dbg_fsync};
+			auto_s2mm_fsync <= 1'b0;
+			if (wr_start)
+				in_frame <= 1'b1;
+			if (wr_done || wr_abort) begin
+				in_frame <= 1'b0;
+				arm_cnt <= 10'd0;
+				h2c_state <= H2C_IDLE;
+			end else begin
+				case (h2c_state)
+				H2C_IDLE: begin
+					if (h2c_tvalid && h2c_tready) begin
+						first_tdata <= h2c_tdata;
+						first_tlast <= h2c_tlast;
+						h2c_state <= H2C_WAIT_ARM;
+						arm_cnt <= 10'd16;
+						auto_s2mm_fsync <= 1'b1;
+					end
+				end
+				H2C_WAIT_ARM: begin
+					if (arm_cnt != 10'd0)
+						arm_cnt <= arm_cnt - 10'd1;
+					if (arm_cnt == 10'd1) begin
+						arm_cnt <= 10'd0;
+						h2c_state <= H2C_FIRST;
+					end
+				end
+				H2C_FIRST: begin
+					if (adapt_h2c_tready)
+						h2c_state <= H2C_STREAM;
+				end
+				H2C_STREAM: begin
+					if (h2c_tvalid && h2c_tready && h2c_tlast)
+						h2c_state <= H2C_IDLE;
+				end
+				default: h2c_state <= H2C_IDLE;
+				endcase
+			end
+		end
+	end
+
+	wire first_forward = (h2c_state == H2C_FIRST);
+	wire stream_forward = (h2c_state == H2C_STREAM);
+	wire [127:0] adapt_h2c_tdata =
+		first_forward ? first_tdata : h2c_tdata;
+	wire adapt_h2c_tvalid =
+		first_forward ? 1'b1 : (stream_forward && h2c_tvalid);
+	wire adapt_h2c_tlast =
+		first_forward ? first_tlast : h2c_tlast;
+	assign h2c_tready =
+		!h2c_rst && !wr_done && !wr_abort &&
+		((h2c_state == H2C_IDLE) ? wr_ready :
+		(stream_forward && adapt_h2c_tready));
 
 	h2c_line_adapt #(
 		.LINE_BEATS(LINE_BEATS),
@@ -67,10 +168,10 @@ module lane_inject #(
 		.clk(h2c_clk),
 		.rst(h2c_rst),
 		.wr_ready(wr_ready),
-		.s_tdata(h2c_tdata),
-		.s_tvalid(h2c_tvalid),
-		.s_tlast(h2c_tlast),
-		.s_tready(h2c_tready),
+		.s_tdata(adapt_h2c_tdata),
+		.s_tvalid(adapt_h2c_tvalid),
+		.s_tlast(adapt_h2c_tlast),
+		.s_tready(adapt_h2c_tready),
 		.m_tdata(s2mm_tdata),
 		.m_tvalid(s2mm_tvalid),
 		.m_tlast(s2mm_tlast),
@@ -93,7 +194,7 @@ module lane_inject #(
 		.frame_ok(frame_ok),
 		.frame_start(frame_start),
 		.frame_done(frame_done),
-		.fsync(mm2s_fsync)
+		.fsync(slot_fsync)
 	);
 
 	raw12_gearbox u_gear (

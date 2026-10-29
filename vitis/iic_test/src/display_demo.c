@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include "xil_types.h"
 #include "xil_cache.h"
+#include "xil_io.h"
 #include "xparameters.h"
 #include "xiicps.h"
 #include "i2c/PS_i2c.h"
@@ -117,6 +118,9 @@ static int frame_vdma_one(u16 device_id, u32 base, u32 buf)
 	return XST_SUCCESS;
 }
 
+static void frame_vdma_status(void);
+static void frame_vdma_rearm(u16 device_id, u32 base, u32 buf);
+
 static void frame_vdma_init(void)
 {
 	u16 ids[3];
@@ -136,11 +140,85 @@ static void frame_vdma_init(void)
 		if (status != XST_SUCCESS)
 			xil_printf("lane %d vdma init failed %d\r\n", i, status);
 	}
+	frame_vdma_status();
+	for (i = 0; i < 3; i++)
+		frame_vdma_rearm(ids[i], bases[i], LANE0_BASE + i * LANE_STRIDE);
+	frame_vdma_status();
+}
+
+static const u32 vdma_bases[3] = { VDMA0_BASE, VDMA1_BASE, VDMA2_BASE };
+
+static void frame_vdma_status(void)
+{
+	int i;
+
+	xil_printf("vdma status\r\n");
+	for (i = 0; i < 3; i++) {
+		u32 mcr = Xil_In32(vdma_bases[i] + XAXIVDMA_CR_OFFSET);
+		u32 msr = Xil_In32(vdma_bases[i] + XAXIVDMA_SR_OFFSET);
+		u32 scr = Xil_In32(vdma_bases[i] + XAXIVDMA_RX_OFFSET + XAXIVDMA_CR_OFFSET);
+		u32 ssr = Xil_In32(vdma_bases[i] + XAXIVDMA_RX_OFFSET + XAXIVDMA_SR_OFFSET);
+
+		xil_printf("vdma%d mm2s cr %08x sr %08x halt %u idle %u err %03x s2mm cr %08x sr %08x halt %u idle %u err %03x\r\n",
+			i, mcr, msr, msr & 1u, (msr >> 1) & 1u, (msr >> 4) & 0x1ffu,
+			scr, ssr, ssr & 1u, (ssr >> 1) & 1u, (ssr >> 4) & 0x1ffu);
+	}
+}
+
+static void frame_vdma_pulse_reset(u32 cr)
+{
+	int n;
+
+	Xil_Out32(cr, XAXIVDMA_CR_RESET_MASK);
+	for (n = 0; n < 1000000; n++) {
+		if ((Xil_In32(cr) & XAXIVDMA_CR_RESET_MASK) == 0)
+			break;
+	}
+}
+
+static void frame_vdma_rearm(u16 device_id, u32 base, u32 buf)
+{
+	u32 cr = base + XAXIVDMA_RX_OFFSET + XAXIVDMA_CR_OFFSET;
+	u32 sr = base + XAXIVDMA_RX_OFFSET + XAXIVDMA_SR_OFFSET;
+	u32 stat = Xil_In32(sr);
+	u32 err = stat & XAXIVDMA_SR_ERR_ALL_MASK;
+
+	if (((stat & XAXIVDMA_SR_HALTED_MASK) == 0) && (err == 0))
+		return;
+
+	xil_printf("vdma 0x%08x s2mm rearm sr %08x\r\n", base, stat);
+	if (err)
+		Xil_Out32(sr, err);
+	frame_vdma_pulse_reset(cr);
+	frame_vdma_one(device_id, base, buf);
+}
+
+/* The first start can happen before the PCIe user clock is running.
+ * Toggle both channels again once that clock has had time to come up. */
+static void frame_vdma_restart_all(void)
+{
+	u16 ids[3] = {
+		XPAR_AXI_VDMA_0_DEVICE_ID,
+		XPAR_AXI_VDMA_1_DEVICE_ID,
+		XPAR_AXI_VDMA_2_DEVICE_ID
+	};
+	int i;
+
+	xil_printf("vdma restart after pcie clock\r\n");
+	for (i = 0; i < 3; i++) {
+		frame_vdma_pulse_reset(vdma_bases[i] + XAXIVDMA_CR_OFFSET);
+		frame_vdma_pulse_reset(vdma_bases[i] + XAXIVDMA_RX_OFFSET + XAXIVDMA_CR_OFFSET);
+		frame_vdma_one(ids[i], vdma_bases[i], LANE0_BASE + i * LANE_STRIDE);
+	}
+	frame_vdma_status();
 }
 #else
 static void frame_vdma_init(void)
 {
 	xil_printf("vdma not in this BSP yet; export the platform after add_pcie3.tcl\r\n");
+}
+static void frame_vdma_status(void)
+{
 }
 #endif
 /* ------------------------------------------------------------ */
@@ -188,7 +266,7 @@ int main(void)
 
 	Xil_DCacheDisable();
 	Xil_ICacheDisable();
-	xil_printf("build Oct 23 2026 - pcie3\r\n");
+	xil_printf("build Oct 27 2026 - s2mm restart\r\n");
 
 	i2c_init(&ps_i2c0, XPAR_XIICPS_0_DEVICE_ID,100000);
 	
@@ -201,6 +279,7 @@ int main(void)
 
 	xil_printf("ch1!\r\n");
 	frame_vdma_init();
+	frame_vdma_status();
 #if 1
 	sleep(1);
 		max_9296_init(&ps_i2c0);
@@ -216,6 +295,8 @@ int main(void)
 		  max_717_init(&ps_i2c0);
 		  max_9296_mipien(&ps_i2c0);
 		  xil_printf("max_9296_mipien!\r\n");
+		  sleep(2);
+		  frame_vdma_restart_all();
 
 
 			usleep(200000);
@@ -225,6 +306,7 @@ int main(void)
 			//senser_rdid(&ps_i2c0);
 			xil_printf("gmsl_debug_loop_start!\r\n");
 			while (1) {
+				frame_vdma_status();
 				MAX9296_rdid(&ps_i2c0);
 				usleep(100);
 				MAX717_debug_dump(&ps_i2c0);
