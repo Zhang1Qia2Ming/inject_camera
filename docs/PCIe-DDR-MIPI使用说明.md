@@ -211,6 +211,83 @@ sudo chmod 660 \
 
 ## 7. 检查 RAW12 输入文件
 
+### 7.1 MCAP 原始数据格式
+
+当前三路注入文件来自：
+
+```text
+/home/ubuntu/zhang/inject_system/data/1_013_20261017-120420_0.mcap
+MD5：84402a7cd4f074620c0834b83fce9ffc
+```
+
+直接读取 MCAP Header、Channel、Schema 和消息内容确认：
+
+- MCAP 是容器；Header `profile` 为空，写入库为 `mcap_merger.py`。
+- 相机消息采用 ROS 2 CDR 编码，Schema 为 `sensor_msgs/msg/Image`。
+- `encoding` 字段为 `h265`，`data` 字段是带 `00 00 00 01` 起始码的 H.265 Annex B 码流。
+- 三路码流均为 HEVC Main、3840×2160、8 bit `yuv420p`、limited range。
+- 消息中的 `height`、`width`、`step` 均为 0，真实视频参数来自 H.265 SPS，不能依赖 ROS Image 这三个字段。
+- 这不是 Sensor 输出的 Bayer/RAW12。它已经经过原相机 ISP、YUV 转换和 H.265 有损压缩；topic 名称中的 `orig/h265` 不代表传感器原始 RAW。
+
+本工程使用的三个 topic：
+
+```text
+/sensor/camera_forward_far/orig/h265
+/sensor/camera_forward_wide/orig/h265
+/sensor/camera_backward/orig/h265
+```
+
+MCAP 约 40 秒，三路消息速率分别约为 10 fps、30 fps、10 fps。当前转换结果为：
+
+```text
+前远：398帧
+前广：1198帧
+后视：400帧
+```
+
+前广最开始两条消息没有 VPS，转换程序会跳过它们，从首个带 VPS 的可独立解码位置开始。H.265 的 I/P 帧依赖只存在于解码阶段；转换成 RAW12 后，PCIe 发送的数据已不再包含 I/P 帧或 H.265 结构。
+
+### 7.2 MCAP 到注入 RAW12 的转换
+
+实际转换链路是：
+
+```text
+MCAP中的ROS2 CDR消息
+→ 提取sensor_msgs/Image.data中的H.265 Annex B
+→ FFmpeg解码为3840×2160 RGB24
+→ 从RGB生成BGGR Bayer采样
+→ 8 bit样值左移4 bit形成12 bit样值
+→ 紧凑RAW12打包
+→ pcie_raw12按完整帧发送
+```
+
+执行：
+
+```bash
+python3 "$ROOT/host/mcap_to_raw12.py" \
+  /home/ubuntu/zhang/inject_system/data/1_013_20261017-120420_0.mcap \
+  "$ROOT/host/frames"
+```
+
+这里生成的是“由已处理RGB图像重新合成的BGGR RAW12”，不是原传感器RAW的无损恢复。域控会把它当作 OX08D RAW 输入再次执行 ISP，因此存在二次 ISP，颜色、锐化、降噪和动态范围不能与真实 OX08D Sensor RAW 完全等价。
+
+BGGR 2×2 排列：
+
+```text
+B G
+G R
+```
+
+两个12 bit像素 `p0`、`p1` 按3字节紧凑打包：
+
+```text
+byte0 = p0[7:0]
+byte1 = {p1[3:0], p0[11:8]}
+byte2 = p1[11:4]
+```
+
+### 7.3 检查输入文件
+
 ```bash
 stat -c '%n %s' \
   "$ROOT/host/frames/tx1_forward_far.raw" \
@@ -225,6 +302,27 @@ stat -c '%n %s' \
 ```
 
 一次 `write()` 必须是一帧 3840×2160 RAW12。不要使用 4 KB 或其他任意长度短包进行验证。
+
+### 7.4 将实际注入 RAW12 转为 PNG 审计
+
+PNG 只是 RAW12 的软件去马赛克预览，不会发送到板卡。应使用已修复红蓝通道顺序的转换器：
+
+```bash
+python3 "$ROOT/host/raw12_to_png.py" \
+  "$ROOT/host/frames/tx1_forward_far.raw" \
+  "$ROOT/host/audit_png/tx1_forward_far" \
+  --workers 6
+```
+
+2026-10-29 审计结果位于：
+
+```text
+host/audit_20261029/png_bggr_corrected/tx1_forward_far/
+host/audit_20261029/png_bggr_corrected/tx2_forward_wide/
+host/audit_20261029/png_bggr_corrected/tx4_backward/
+```
+
+不要使用 `host/audit_20261029/png/` 判断颜色；该目录由旧版预览代码生成，红蓝通道交换。该错误只影响 PNG 显示，不影响 BGGR RAW12 注入文件。
 
 ## 8. 启动三路发送
 
@@ -253,6 +351,16 @@ lane 2 frames 30
 ```
 
 每路应约 30 fps，三个计数持续增长且基本一致。
+
+当前发送器三路物理输出均为 30 fps，并按原 MCAP 频率恢复内容时间轴：
+
+```text
+lane0 前远：10Hz源，每帧连续发送3次
+lane1 前广：30Hz源，每帧发送1次
+lane2 后视：10Hz源，每帧连续发送3次
+```
+
+日志计数仍表示物理输出帧数。严格 30 fps 及软件重复帧只保证频率和播放速度，不等于注入卡与域控真实相机已经完成共同硬件 FSYNC。
 
 ## 9. 运行控制
 
@@ -405,3 +513,89 @@ sudo rmmod xdma
 4. 再进行整机下电。
 
 不要在发送程序运行或 XDMA 描述符在途时热插拔注入卡。
+
+## 16. UYVY422版本开发与验证
+
+UYVY422使用独立`design_uyvy`和后续独立BOOT，不与当前RAW12成功镜像
+混用。以下命令用于软件和RTL验证；在完成综合、实现及硬件验证前，不要
+把它当作现场可部署版本。
+
+### 16.1 转换MCAP
+
+```bash
+cd /data/work/gmsl_4ev/code/mipi_gmsl/zu4_pcie_gmsl_tx1rx1_6gloop
+python3 host/mcap_convert.py \
+  /path/to/input.mcap \
+  host/frames_uyvy \
+  --format uyvy422
+```
+
+输出三路文件：
+
+```text
+tx1_forward_far.uyvy422
+tx2_forward_wide.uyvy422
+tx4_backward.uyvy422
+```
+
+每帧必须恰好16,588,800字节，字节顺序为`U,Y0,V,Y1`。
+
+### 16.2 编译和启动发送器
+
+```bash
+g++ -std=c++17 -O2 -pthread \
+  host/pcie_uyvy.cpp -o host/pcie_uyvy
+
+sudo host/pcie_uyvy \
+  host/frames_uyvy/tx1_forward_far.uyvy422 \
+  host/frames_uyvy/tx2_forward_wide.uyvy422 \
+  host/frames_uyvy/tx4_backward.uyvy422
+```
+
+交互控制仍为：
+
+```text
+stop 0
+stop 1
+stop 2
+quit
+```
+
+一次XDMA `write()`必须对应一帧。发生正数短写时程序立即停止该路，不能
+续写剩余字节，否则第二次写入会产生新的TLAST并破坏帧边界。
+
+### 16.3 Vivado RTL回归
+
+```bash
+./run_uyvy_xsim.sh
+```
+
+成功标志应同时出现：
+
+```text
+PASS tb_uyvy_gearbox
+PASS tb_lane_uyvy
+PASS tb_mipi_gen_uyvy
+```
+
+### 16.4 创建独立UYVY BD
+
+```bash
+source /data/xilinx/Vivado/2020.2/settings64.sh
+vivado -mode batch -notrace \
+  -source create_uyvy_bd.tcl \
+  -log /tmp/create_uyvy_bd.log \
+  -journal /tmp/create_uyvy_bd.jou
+```
+
+成功标志：
+
+```text
+UYVY_BD_OK design=design_uyvy
+lane0 datatype=YUV422_8b max_bpc=8 pixel_mode=4 csi_width=96 subset_s_bytes=8 subset_m_bytes=12
+lane1 datatype=YUV422_8b max_bpc=8 pixel_mode=4 csi_width=96 subset_s_bytes=8 subset_m_bytes=12
+lane2 datatype=YUV422_8b max_bpc=8 pixel_mode=4 csi_width=96 subset_s_bytes=8 subset_m_bytes=12
+```
+
+PS应用编译UYVY版本时定义`VIDEO_FORMAT_UYVY`；未定义时仍为RAW12参数。
+不要覆盖当前RAW12 bitstream、BOOT或`design_1`。

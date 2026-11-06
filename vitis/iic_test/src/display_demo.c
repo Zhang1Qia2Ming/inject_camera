@@ -21,24 +21,20 @@
 #include "config.h"
 #include "xcsiss.h"
 #include <string.h>
+#include "video_format.h"
 
 #define CAM_EMIO	78
 
 #ifdef XPAR_AXI_VDMA_0_DEVICE_ID
 #include "xaxivdma.h"
 
-/* One RAW12 image, no embedded lines. Three slots per lane.
+/* One image, no embedded lines. Three slots per lane.
  * HPM0_LPD maps 0x80000000. add_pcie3.tcl leaves the three VDMA
  * register blocks on that aperture, 64K apart, with the CSI RX at 0x80010000. */
-#define RAW_FRAME_BYTES 12441600u
-#define RAW_HSIZE       5760u
-#define RAW_VSIZE       2160u
-#define RAW_SLOTS       3u
 #define VDMA0_BASE      0x80000000u
 #define VDMA1_BASE      0x80020000u
 #define VDMA2_BASE      0x80030000u
 #define LANE0_BASE      0x10000000u
-#define LANE_STRIDE     (RAW_FRAME_BYTES * RAW_SLOTS)
 
 static int frame_vdma_one(u16 device_id, u32 base, u32 buf)
 {
@@ -67,9 +63,9 @@ static int frame_vdma_one(u16 device_id, u32 base, u32 buf)
 	}
 
 	memset(&wr, 0, sizeof(wr));
-	wr.VertSizeInput = RAW_VSIZE;
-	wr.HoriSizeInput = RAW_HSIZE;
-	wr.Stride = RAW_HSIZE;
+	wr.VertSizeInput = VIDEO_VSIZE;
+	wr.HoriSizeInput = VIDEO_HSIZE;
+	wr.Stride = VIDEO_HSIZE;
 	wr.FrameDelay = 0;
 	wr.EnableCircularBuf = 1;
 	wr.EnableSync = 0;
@@ -81,9 +77,9 @@ static int frame_vdma_one(u16 device_id, u32 base, u32 buf)
 		return status;
 
 	memset(&rd, 0, sizeof(rd));
-	rd.VertSizeInput = RAW_VSIZE;
-	rd.HoriSizeInput = RAW_HSIZE;
-	rd.Stride = RAW_HSIZE;
+	rd.VertSizeInput = VIDEO_VSIZE;
+	rd.HoriSizeInput = VIDEO_HSIZE;
+	rd.Stride = VIDEO_HSIZE;
 	rd.FrameDelay = 0;
 	rd.EnableCircularBuf = 1;
 	rd.EnableSync = 0;
@@ -95,10 +91,10 @@ static int frame_vdma_one(u16 device_id, u32 base, u32 buf)
 		return status;
 
 	addr = buf;
-	for (i = 0; i < RAW_SLOTS; i++) {
+	for (i = 0; i < VIDEO_SLOTS; i++) {
 		wr.FrameStoreStartAddr[i] = addr;
 		rd.FrameStoreStartAddr[i] = addr;
-		addr += RAW_FRAME_BYTES;
+		addr += VIDEO_FRAME_BYTES;
 	}
 	status = XAxiVdma_DmaSetBufferAddr(&vdma, XAXIVDMA_WRITE, wr.FrameStoreStartAddr);
 	if (status != XST_SUCCESS)
@@ -136,13 +132,13 @@ static void frame_vdma_init(void)
 	bases[2] = VDMA2_BASE;
 
 	for (i = 0; i < 3; i++) {
-		status = frame_vdma_one(ids[i], bases[i], LANE0_BASE + i * LANE_STRIDE);
+		status = frame_vdma_one(ids[i], bases[i], LANE0_BASE + i * VIDEO_LANE_STRIDE);
 		if (status != XST_SUCCESS)
 			xil_printf("lane %d vdma init failed %d\r\n", i, status);
 	}
 	frame_vdma_status();
 	for (i = 0; i < 3; i++)
-		frame_vdma_rearm(ids[i], bases[i], LANE0_BASE + i * LANE_STRIDE);
+		frame_vdma_rearm(ids[i], bases[i], LANE0_BASE + i * VIDEO_LANE_STRIDE);
 	frame_vdma_status();
 }
 
@@ -208,7 +204,7 @@ static void frame_vdma_restart_all(void)
 	for (i = 0; i < 3; i++) {
 		frame_vdma_pulse_reset(vdma_bases[i] + XAXIVDMA_CR_OFFSET);
 		frame_vdma_pulse_reset(vdma_bases[i] + XAXIVDMA_RX_OFFSET + XAXIVDMA_CR_OFFSET);
-		frame_vdma_one(ids[i], vdma_bases[i], LANE0_BASE + i * LANE_STRIDE);
+		frame_vdma_one(ids[i], vdma_bases[i], LANE0_BASE + i * VIDEO_LANE_STRIDE);
 	}
 	frame_vdma_status();
 }

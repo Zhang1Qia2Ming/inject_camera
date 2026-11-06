@@ -7,10 +7,23 @@ set_property IOSTANDARD LVCMOS12 [get_ports pcie_rst_n]
 set_property PACKAGE_PIN Y6 [get_ports {pcie_ref_clk_p[0]}]
 set_property PACKAGE_PIN Y5 [get_ports {pcie_ref_clk_n[0]}]
 
-set_property LOC GTHE4_CHANNEL_X0Y4 [get_cells -hierarchical -filter {NAME =~ *gen_gthe4_channel_inst\[0\].GTHE4_CHANNEL_PRIM_INST}]
-set_property LOC GTHE4_CHANNEL_X0Y5 [get_cells -hierarchical -filter {NAME =~ *gen_gthe4_channel_inst\[1\].GTHE4_CHANNEL_PRIM_INST}]
-set_property LOC GTHE4_CHANNEL_X0Y6 [get_cells -hierarchical -filter {NAME =~ *gen_gthe4_channel_inst\[2\].GTHE4_CHANNEL_PRIM_INST}]
-set_property LOC GTHE4_CHANNEL_X0Y7 [get_cells -hierarchical -filter {NAME =~ *gen_gthe4_channel_inst\[3\].GTHE4_CHANNEL_PRIM_INST}]
+# Pin every PCIe GT and clock primitive to the locations proven by the
+# hardware-working RAW12 image.  The implementation otherwise moves several
+# BUFG_GT resources even though the logical XDMA configuration is unchanged.
+set_property LOC GTHE4_CHANNEL_X0Y4 [get_cells -hierarchical -regexp {.*gen_gthe4_channel_inst\[0\]\.GTHE4_CHANNEL_PRIM_INST$}]
+set_property LOC GTHE4_CHANNEL_X0Y5 [get_cells -hierarchical -regexp {.*gen_gthe4_channel_inst\[1\]\.GTHE4_CHANNEL_PRIM_INST$}]
+set_property LOC GTHE4_CHANNEL_X0Y6 [get_cells -hierarchical -regexp {.*gen_gthe4_channel_inst\[2\]\.GTHE4_CHANNEL_PRIM_INST$}]
+set_property LOC GTHE4_CHANNEL_X0Y7 [get_cells -hierarchical -regexp {.*gen_gthe4_channel_inst\[3\]\.GTHE4_CHANNEL_PRIM_INST$}]
+
+set_property LOC BUFG_GT_X0Y30 [get_cells -hierarchical -regexp {.*/bufg_gt_sysclk$}]
+set_property LOC BUFG_GT_X0Y36 [get_cells -hierarchical -regexp {.*/bufg_gt_coreclk$}]
+set_property LOC BUFG_GT_X0Y46 [get_cells -hierarchical -regexp {.*/bufg_gt_intclk$}]
+set_property LOC BUFG_GT_X0Y45 [get_cells -hierarchical -regexp {.*/bufg_gt_mcapclk$}]
+set_property LOC BUFG_GT_X0Y44 [get_cells -hierarchical -regexp {.*/bufg_gt_pclk$}]
+set_property LOC BUFG_GT_X0Y28 [get_cells -hierarchical -regexp {.*gen_cpll_cal_inst\[0\].*bufg_gt_txoutclkmon_inst$}]
+set_property LOC BUFG_GT_X0Y39 [get_cells -hierarchical -regexp {.*gen_cpll_cal_inst\[1\].*bufg_gt_txoutclkmon_inst$}]
+set_property LOC BUFG_GT_X0Y24 [get_cells -hierarchical -regexp {.*gen_cpll_cal_inst\[2\].*bufg_gt_txoutclkmon_inst$}]
+set_property LOC BUFG_GT_X0Y41 [get_cells -hierarchical -regexp {.*gen_cpll_cal_inst\[3\].*bufg_gt_txoutclkmon_inst$}]
 
 set_property PACKAGE_PIN AE5 [get_ports CLK_200m_clk_p]
 set_property IOSTANDARD DIFF_SSTL12 [get_ports CLK_200m_clk_p]

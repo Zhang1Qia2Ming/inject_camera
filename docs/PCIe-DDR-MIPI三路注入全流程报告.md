@@ -3,7 +3,7 @@
 > 工程：`zu4_pcie_gmsl_tx1rx1_6gloop`  
 > 工具版本：Vivado / Vitis 2020.2  
 > FPGA：XCZU4EV-SFVC784-2-I  
-> 文档状态：板内链路已通过 JTAG 和 SD 冷启动实测；域控物理接收仍需最终验收  
+> 文档状态：板内链路、SD 冷启动和域控三路基础接收已实测；混合接入场景仍在分析
 > 最后验证时间：2026-10-29
 
 现场操作可直接阅读同目录的《PCIe → DDR → MIPI 三路注入使用说明》。
@@ -267,6 +267,94 @@ DDR 方案不是没有代价：
 - 一帧字节数：`5760 × 2160 = 12,441,600` 字节。
 - 主机每次 `write()` 必须正好写一帧。
 - XDMA 在每次 `write()` 的最后一拍产生 H2C `TLAST`。
+
+#### 3.1.1 当前 MCAP 的真实数据格式
+
+当前数据源是：
+
+```text
+/home/ubuntu/zhang/inject_system/data/1_013_20261017-120420_0.mcap
+MD5：84402a7cd4f074620c0834b83fce9ffc
+```
+
+MCAP 是消息容器，不是图像像素格式。直接解析其 Header、Channel、Schema 和消息字段后确认：
+
+- Header：`profile=""`，`library="mcap_merger.py"`。
+- 相机 Channel 的 `message_encoding` 为 `cdr`。
+- Schema 为 `sensor_msgs/msg/Image`，Schema 编码为 `ros2msg`。
+- ROS Image 的 `encoding` 字段为 `h265`。
+- `data` 从 `00 00 00 01` 开始，是 H.265 Annex B elementary stream。
+- H.265 SPS 表明三路均为 HEVC Main、3840×2160、8 bit `yuv420p`、limited range。
+- ROS Image 的 `height=0`、`width=0`、`step=0`；实际分辨率必须从 SPS 获取。
+
+使用的 topic 为：
+
+```text
+/sensor/camera_forward_far/orig/h265
+/sensor/camera_forward_wide/orig/h265
+/sensor/camera_backward/orig/h265
+```
+
+因此，这里的 `orig/h265` 不是 Sensor Bayer RAW。MCAP 内图像已经经历：
+
+```text
+真实Sensor RAW
+→ 原相机ISP
+→ YUV420
+→ H.265有损编码
+→ ROS2 sensor_msgs/Image.data
+→ MCAP封装
+```
+
+约40秒记录中，前远、前广、后视分别约为10 fps、30 fps、10 fps。转换得到398、1198、400帧；前广开头两条不带VPS的P帧被跳过。
+
+主机发送器保持三路30Hz物理输出。为避免10Hz源被3倍速播放，lane0前远和lane2后视的每个源帧连续发送3次；lane1前广逐帧发送。该处理恢复内容时间轴，但不替代跨设备硬件FSYNC。
+
+#### 3.1.2 H.265 到 BGGR RAW12
+
+`host/mcap_to_raw12.py` 执行：
+
+```text
+MCAP/ROS2 CDR
+→ 提取H.265 Annex B
+→ FFmpeg解码为RGB24
+→ RGB合成BGGR Bayer
+→ 8 bit样值左移4 bit
+→ 紧凑RAW12
+```
+
+BGGR采样排列为：
+
+```text
+B G
+G R
+```
+
+每两个12 bit像素打包为3字节：
+
+```text
+byte0 = p0[7:0]
+byte1 = {p1[3:0], p0[11:8]}
+byte2 = p1[11:4]
+```
+
+这一步不会恢复压缩前的真实 Sensor RAW，只是从ISP处理后的RGB重新构造可供注入链路使用的Bayer数据。域控随后再次按 OX08D 输入执行 ISP，因此当前方案实质上存在二次 ISP；颜色响应、噪声、锐化和动态范围与真实相机不完全等价。
+
+H.265 的 I/P 帧只影响 MCAP 解码阶段。一旦生成 RAW12，PCIe、DDR和MIPI链路看到的是逐帧独立的固定长度像素，不再包含 GOP、I帧或P帧语义。域控网页预览重新编码出的 H.265 仍可能因参考帧丢失而把上游短暂异常放大成持续花屏。
+
+#### 3.1.3 RAW12 PNG 审计
+
+`host/raw12_to_png.py` 对实际注入 RAW12 执行解包和 BGGR 去马赛克，PNG 仅用于人工检查，不进入发送链路。
+
+2026-10-29 已重新生成并核对：
+
+```text
+host/audit_20261029/png_bggr_corrected/tx1_forward_far/  398张
+host/audit_20261029/png_bggr_corrected/tx2_forward_wide/ 1198张
+host/audit_20261029/png_bggr_corrected/tx4_backward/      400张
+```
+
+三路编号连续。旧目录 `host/audit_20261029/png/` 的预览程序曾交换红蓝通道，不能用于颜色判断；该问题不影响 RAW12 文件和硬件发送。
 
 ### 3.2 AXI-Stream 宽度
 
@@ -1219,6 +1307,10 @@ vitis/iic_test/src/display_demo.c
 vitis/iic_test/pcie3_build/iic_test.elf
 
 主机
+host/mcap_to_raw12.py
+host/raw12_to_png.py
+host/test_mcap_to_raw12.py
+host/test_raw12_to_png.py
 host/pcie_raw12.cpp
 host/pcie_raw12
 
@@ -1233,4 +1325,97 @@ project_1.runs/impl_tx2/design_1_wrapper.ltx
 
 仿真、综合、实现、时序、JTAG、VDMA 和 ILA 证据相互一致。三路各 900 帧的硬件连续测试证明板内链路已打通。
 
-下一里程碑是接入域控，完成 MIPI/GMSL/nvsipl 端到端验收。
+三路已完成接入域控的 MIPI/GMSL/nvsipl 基础验收。当前待解决问题是“注入前远、保留真实前广”的混合接入场景中，真实前广网页预览出现周期性卡顿/花屏。离线审计已证明进入 PCIe 前的三路 RAW12 序列没有对应花屏，后续应重点区分：
+
+1. 注入卡与真实相机只有同频、没有同相硬件帧同步，导致域控多相机时间戳匹配超时。
+2. 由已处理图像合成的 RAW12 经二次 ISP 后复杂度升高，增加共享编码链路负载。
+3. `nvsipl_camera` 原始采集是否连续；若原始采集正常而网页 H.265 花屏，问题位于域控编码/预览链路，反之应检查 CSI、ISP和同步逻辑。
+
+## 19. UYVY422 独立链路版本
+
+为兼容后续不经过域控 Bayer ISP 的注入方式，工程在保留上述 RAW12
+成功版本的同时新增了独立 UYVY422 数据通路。本轮不修改域控
+camera_service、SIPL 配置或 DevBlk 驱动。
+
+### 19.1 数据结构
+
+- 分辨率：3840×2160。
+- 内存字节顺序：`U,Y0,V,Y1`。
+- 每行：7680 字节。
+- 每帧：16,588,800 字节。
+- H2C/VDMA：128 bit，每行480拍。
+- VDMA读出后由`uyvy_gearbox`转换为64 bit，每拍4像素。
+- CSI-2 DT：`0x1e`。
+- 顶部2行和底部4行为保留行，MIPI有效高度2166行。
+- 三路30 fps主机载荷约1.493 GB/s；DDR最少写入加读出约2.986 GB/s。
+
+```text
+MCAP H.265
+  → ffmpeg uyvy422
+  → 三路 .uyvy422 文件
+  → pcie_uyvy
+  → XDMA H2C 128 bit
+  → 三路 VDMA/DDR 帧槽
+  → 128→64 bit UYVY gearbox
+  → mipi_gen_uyvy
+  → AXIS subset 64→96 bit
+  → CSI-2 TX YUV422_8b
+```
+
+### 19.2 独立Block Design
+
+`create_uyvy_bd.tcl`从已导出的RAW12设计结构创建`design_uyvy`，不覆盖
+`design_1`。Vivado 2020.2完整BD校验已通过，三路参数均为：
+
+```text
+C_CSI_DATATYPE          = YUV422_8b
+C_CSI_MAX_BPC           = 8
+C_CSI_PIXEL_MODE        = 4
+C_CSI_AXIS_TDATA_WIDTH  = 96
+subset S_TDATA          = 8 bytes
+subset M_TDATA          = 12 bytes
+TDATA_REMAP             = 32'b0,tdata[63:0]
+```
+
+PS端通过`VIDEO_FORMAT_UYVY`选择独立参数：VDMA HSIZE/stride为7680，
+单帧16,588,800字节；MAX96717/MAX9295的数据类型映射改为`0x1e`。
+RAW12默认参数保持不变。
+
+### 19.3 当前证据边界
+
+2026-11-02使用Vivado 2020.2 xsim通过：
+
+- `tb_uyvy_gearbox`
+- `tb_lane_uyvy`
+- `tb_mipi_gen_uyvy`
+
+上位机格式、文件校验、XDMA写入策略、MCAP转换和PS格式常量测试也已
+通过。Vivado实现和bitstream生成也已完成：
+
+```text
+bitstream  = project_1.runs/impl_uyvy/design_uyvy_wrapper.bit
+size       = 6,297,705 bytes
+SHA-256    = 49aa4e7baaf8e0bef9019e4bd0ef2d225b9ff5ca64b3cc1fd26b43c2a60bc376
+WNS/TNS    = +0.161 ns / 0
+WHS/THS    = +0.010 ns / 0
+LUT        = 48,509 / 87,840 (55.22%)
+Register   = 64,250 / 175,680 (36.57%)
+BRAM       = 78.5 / 128 (61.33%)
+DSP        = 0 / 728
+```
+
+所有已定义时序约束均满足。报告中的PCIe未约束端点数量与RAW12基线一致，
+并非本次UYVY改动新增，但后续正式签核仍应补齐该约束。
+
+UYVY专用PS裸机程序已使用`VIDEO_FORMAT_UYVY`编译，BOOT镜像包含
+`fsbl_a53.elf`、`design_uyvy_wrapper.bit`和`iic_test_uyvy.elf`：
+
+```text
+BOOT       = vitis/iic_test_system/_ide/bootimage/BOOT_1103_UYVY.bin
+size       = 6,468,168 bytes
+SHA-256    = 1e6b7e16c2bad7bb2c32e3e48134649f71c35939544c48cf1d884d216eac75a5
+```
+
+当前尚未完成JTAG下载和真实硬件接收验证，因此不能用这些结果宣称域控
+UYVY全链路已经打通。保留行目前发送neutral-black UYVY，精确OX08D HIL
+metadata仍需后续硬件抓取确认。

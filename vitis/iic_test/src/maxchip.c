@@ -4,6 +4,7 @@
 #include "i2c/PS_i2c.h"
 #include "sleep.h"
 #include "config.h"
+#include "video_format.h"
 
 u16 slave_addr;
 
@@ -44,7 +45,7 @@ struct reginfo max96717_init_setting[] = {
  {0x0308, 0x64},    // Line-start enable, port B selected
  {0x0311, 0x40},    // start Z from B,20
  {0x005b, 0x01},    // Pipe z stream id 1
- {0x0318, 0x6c},    // Datatype 0x2c
+ {0x0318, (0x40u | VIDEO_CSI_DATATYPE)}, // Enable DT mapping: RAW12 0x2c / UYVY 0x1e
  {SEQUENCE_END, 0xff}
 };
 
@@ -54,7 +55,7 @@ struct reginfo max9295_init_setting[] = {
  0x0311, 0x20,    // start y from B,20
  0x0308, 0x62,    // Line-start enable, port B selected
  0x0002, 0x23,    // Video transmit y enable
- 0x0316, 0x6c,    // Datatype 0x2c
+ 0x0316, (0x40u | VIDEO_CSI_DATATYPE), // Enable DT mapping
  0x03f0, 0x51,    // Enable reference generation pll
  0x0003, 0x03,    // Reference clk output enable
  0x0006, 0xb1,    // RCLK output enable, I2c selected
