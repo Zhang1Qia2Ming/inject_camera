@@ -14,6 +14,7 @@ module tb_mipi_gen_uyvy_reserved_rom;
 	integer image_beats = 0;
 	integer lines = 0;
 	integer line_beats = 0;
+	integer frames = 0;
 	integer golden_index;
 	reg [15:0] golden_997 [0:23039];
 	reg [63:0] expected_source;
@@ -52,13 +53,26 @@ module tb_mipi_gen_uyvy_reserved_rom;
 			end
 			if ((pg_tuser[47:32] <= 16'd2) ||
 			    (pg_tuser[47:32] > 16'd3)) begin
-				golden_index = reserved_beats * 4;
+				golden_index = (reserved_beats % 5760) * 4;
 				expected_source = {
 					golden_997[golden_index + 3],
 					golden_997[golden_index + 2],
 					golden_997[golden_index + 1],
 					golden_997[golden_index]
 				};
+				// OX08D EBD frame counter is the big-endian value of
+				// registers 0x462A..0x462D. It must follow the CSI frame
+				// number instead of replaying the captured ROM value 12.
+				if (pg_tuser[47:32] == 16'd1) begin
+					case (line_beats)
+						17: expected_source[63:56] = 8'd0;
+						18: expected_source[63:56] = 8'd0;
+						19: expected_source[63:56] =
+							pg_tuser[31:24];
+						20: expected_source[63:56] =
+							pg_tuser[23:16];
+					endcase
+				end
 				expected_axis = {
 					32'd0,
 					expected_source[55:48],
@@ -96,17 +110,19 @@ module tb_mipi_gen_uyvy_reserved_rom;
 				line_beats = 0;
 			end
 		end
+		if (frame_done)
+			frames = frames + 1;
 	end
 
 	initial begin
 		repeat (3) @(posedge clk);
 		frame_ok <= 1;
-		@(posedge clk);
+		wait (frames == 1);
 		frame_ok <= 0;
-		wait (frame_done);
+		wait (frames == 2);
 		@(posedge clk);
-		if ((reserved_beats != 5760) || (image_beats != 960) ||
-		    (lines != 7)) begin
+		if ((reserved_beats != 11520) || (image_beats != 1920) ||
+		    (lines != 14)) begin
 			$display("FAIL reserved=%0d image=%0d lines=%0d",
 				reserved_beats, image_beats, lines);
 			$fatal;

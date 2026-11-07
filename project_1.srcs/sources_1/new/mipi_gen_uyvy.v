@@ -209,7 +209,7 @@ module mipi_gen_uyvy_lane #(
 	localparam RESERVED_ROM_WORDS = 6 * RESERVED_LINE_WORDS;
 
 	reg running = 1'b0;
-	reg [15:0] frame_number = 16'd1;
+	reg [31:0] frame_number = 32'd1;
 	reg [12:0] pixel_count = 13'd1;
 	reg [12:0] line_count = 13'd1;
 
@@ -243,6 +243,7 @@ module mipi_gen_uyvy_lane #(
 	wire [12:0] next_reserved_word_index =
 		next_reserved_slot * RESERVED_LINE_WORDS;
 	wire [63:0] reserved_data;
+	wire [63:0] reserved_frame_data;
 	wire [95:0] image_axis_data;
 	wire [95:0] reserved_axis_data;
 	wire reserved_ready;
@@ -331,7 +332,7 @@ module mipi_gen_uyvy_lane #(
 
 	always @(posedge clk) begin
 		if (step && frame_last)
-			frame_number <= frame_number + 16'd1;
+			frame_number <= frame_number + 32'd1;
 	end
 
 	assign frame_start = arm || (step && frame_last && frame_ok);
@@ -356,15 +357,47 @@ module mipi_gen_uyvy_lane #(
 		end
 	endfunction
 
+	// The first top EBD row contains OX08D registers 0x462A..0x462D.
+	// Each four-slot EBD record occupies one 64-bit source word and its
+	// register value is source[63:56]. Keep the captured 997 template but
+	// replace the static frameCnt=12 with this frame's counter.
+	function [63:0] patch_ebd_frame_counter;
+		input [63:0] source;
+		input [2:0] slot;
+		input [12:0] beat;
+		input [31:0] frame;
+		begin
+			patch_ebd_frame_counter = source;
+			if (slot == 3'd0) begin
+				case (beat)
+					13'd17:
+						patch_ebd_frame_counter[63:56] =
+							frame[31:24];
+					13'd18:
+						patch_ebd_frame_counter[63:56] =
+							frame[23:16];
+					13'd19:
+						patch_ebd_frame_counter[63:56] =
+							frame[15:8];
+					13'd20:
+						patch_ebd_frame_counter[63:56] =
+							frame[7:0];
+				endcase
+			end
+		end
+	endfunction
+
+	assign reserved_frame_data = patch_ebd_frame_counter(
+		reserved_data, reserved_slot, pixel_count, frame_number);
 	assign image_axis_data = pack_uyvy_axis(pix_data);
-	assign reserved_axis_data = pack_uyvy_axis(reserved_data);
+	assign reserved_axis_data = pack_uyvy_axis(reserved_frame_data);
 	assign tdata = reserved_line ? reserved_axis_data : image_axis_data;
 	// This is the input-side contract of the existing AXIS subset converter:
 	// it moves [69:64] to PG260 TUSER[6:1] and preserves [63:16] and [0].
 	assign tuser = {
 		26'b0, 6'h1e,
 		BYTE_NUM[15:0],
-		{3'b0, line_count}, frame_number, 15'b0,
+		{3'b0, line_count}, frame_number[15:0], 15'b0,
 		(pixel_count == 13'd1) && (line_count == 13'd1)
 	};
 	assign tvalid = running && payload_active && beat_ready;

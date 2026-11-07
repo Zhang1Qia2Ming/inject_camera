@@ -14,6 +14,9 @@ proc disconnect_pin {pin_name} {
 
 disconnect_pin ila_0/clk
 disconnect_pin ila_0/probe0
+disconnect_pin ila_0/probe1
+disconnect_pin ila_0/probe2
+disconnect_pin ila_0/probe3
 disconnect_pin mipi_gen_0/dbg_clk
 
 set_property -dict [list \
