@@ -1,4 +1,7 @@
-# Sensor8 UYVY 全链路验证手册
+# Sensor8/10/11 UYVY 全链路验证手册
+
+> 更新日期：2026-11-09。本文同时覆盖底层 `nvsipl_camera` 验证和不改动生产
+> `camera_service` 的三路实时网页预览。
 
 ## 1. 验证目标
 
@@ -9,10 +12,11 @@ MCAP/H265 转换文件
   -> 上位机 pcie_uyvy
   -> PCIe Gen3 x4 / XDMA H2C0
   -> 注入卡 DDR
-  -> FPGA CSI-2 TX1
+  -> FPGA CSI-2 TX1 / TX2 / TX4
   -> MAX96717 / GMSL2
   -> ThorA MAX96712
-  -> nvsipl_camera Sensor8_Out0
+  -> NvSIPL ICP
+  -> Sensor8 / Sensor10 / Sensor11
 ```
 
 当前成功合同：
@@ -21,10 +25,13 @@ MCAP/H265 转换文件
 - 分辨率：3840×2160
 - CSI Word Count：7680 bytes/line
 - 帧率：30 fps
-- Sensor8对应：服务器H2C0、注入卡TX1、域控Sensor8
+- 三路映射：
+  - H2C0 / TX1 / Sensor8：前远
+  - H2C1 / TX2 / Sensor10：后视
+  - H2C2 / TX4 / Sensor11：前广
 
-> 当前成功镜像通过JTAG加载。验证期间不要重启注入卡或服务器；重启后若SD卡
-> 仍不是该镜像，需要重新JTAG加载或更新BOOT.bin。
+> 成功镜像已制作成BOOT.bin。验证期间不要复位、热插拔注入卡；若重启后PCIe
+> Endpoint未出现，先确认SD卡镜像和PL DONE，再执行PCIe恢复脚本。
 
 ## 2. 准备两个终端
 
@@ -119,8 +126,7 @@ lane 1 frames 30
 lane 2 frames 30
 ```
 
-三个计数应持续增加。Sensor8只依赖lane 0；lane 1/2当前还受TX2/TX4
-GMSL物理支路状态影响。
+三个计数应持续增加。当前TX1、TX2、TX4均已通过对应Sensor链路验证。
 
 以下信息表示发送失败：
 
@@ -136,7 +142,7 @@ cd ~/zhang
 sudo ./recover_pcie_inject.sh
 ```
 
-## 5. ThorA运行nvsipl验证Sensor8
+## 5. ThorA运行nvsipl验证
 
 在终端B登录：
 
@@ -169,6 +175,19 @@ Sensor8_Out0  Frame rate (fps): 29.999
 ```
 
 第一次统计可能是约`28.999`或`29.499`，后续应稳定接近30 fps。
+
+三路联合验证使用：
+
+```bash
+nvsipl_camera \
+  -c X3C_OX08D10_031_16v_hil \
+  -m "0x0000 0x0000 0x1101 0x0000" \
+  -R -0 -1 -2 -s -r 1800 -v 4 \
+  2>&1 | tee /root/nvsipl_sensor8_10_11_manual.log
+```
+
+成功时Sensor8、Sensor10、Sensor11均应持续接近30 fps。`-r 1800`用于三路
+30分钟稳定性验收。
 
 ## 6. 验证结果统计
 
@@ -241,5 +260,117 @@ pkill -x nvsipl_camera 2>/dev/null || true
 - FPGA ILA：PG260入口`DT=0x1E`、`WC=7680`、`TVALID=TREADY=1`；
 - MAX96717：`0x0112=0x8A`；
 - Sensor8：连续约10分钟29.999 fps；
+- Sensor8/10/11：三路联合连续30分钟稳定出帧；
 - `ICP_CAPTURE_TIMEOUT/BAD_INPUT/CRC/Frame discontinuity`计数均为0。
+
+## 10. 三路独立实时预览
+
+### 10.1 作用与边界
+
+`img_transfer_v2`是独立验证工具，直接消费NvSIPL ICP completion queue中的
+UYVY帧，不经过生产`camera_service`的NvSciStream、Img2D或H265发布路径，也
+不会替换生产`camera_service`。同一时刻不能让它与`camera_service`或
+`nvsipl_camera`共同抢占相机资源。
+
+代码位置：
+
+```text
+/home/ubuntu/zhang/hos_dev/multicast_2/hil_preview_direct.cpp
+/home/ubuntu/zhang/hos_dev/multicast_2/CHilPreviewWriter.cpp
+/home/ubuntu/zhang/img_transfer_v2/
+```
+
+ThorA部署位置：
+
+```text
+/root/img_transfer_v2/
+```
+
+### 10.2 启动、查看和恢复
+
+保持上位机三路`pcie_uyvy`正在发送，然后在ThorA执行：
+
+```bash
+/root/img_transfer_v2/main.sh start
+/root/img_transfer_v2/main.sh status
+```
+
+浏览器访问：
+
+```text
+http://172.31.17.9:8089/
+```
+
+网页提供三路动态MJPEG：
+
+```text
+/stream/sensor8.mjpg
+/stream/sensor10.mjpg
+/stream/sensor11.mjpg
+```
+
+网页预览主动限频到约10 fps，因此状态中的`9.98 fps`是预期值，不能与底层
+30 fps链路吞吐混为一谈。实测停止`pcie_uyvy`后，约5秒内三路网页FPS归零；
+恢复发送后自动恢复约9.98 fps，JPEG内容和时间戳均持续变化。
+
+结束验证并恢复原业务环境：
+
+```bash
+/root/img_transfer_v2/main.sh stop
+```
+
+### 10.3 状态判据
+
+```bash
+/root/img_transfer_v2/main.sh status
+```
+
+正常输出应包含：
+
+```text
+preview: running
+web:     running
+Sensor8_Out0  Frame rate (fps): 约9.98
+Sensor10_Out0 Frame rate (fps): 约9.98
+Sensor11_Out0 Frame rate (fps): 约9.98
+```
+
+若网页仍显示旧画面但`fps_fresh=false`或FPS为0，表示没有新帧，不得把缓存的
+最后一张JPEG误判为链路仍在传输。
+
+## 11. 预览偏色问题及修复依据
+
+2026-11-09曾出现红色货车在网页中显示成紫色。抓取Sensor8的ICP原始帧后，
+按3840×2166 UYVY解码（裁掉顶部2行和底部4行）可得到正常红色，证明：
+
+- FPGA、GMSL和NvSIPL输出的U/V顺序正确；
+- 原始格式确实是packed UYVY，即`U,Y0,V,Y1`；
+- 问题不在FPGA、MAX96717或域控驱动。
+
+根因是旧预览代码将交错UYVY直接从3840×2160缩放到960×540，再转换BGR。
+横向缩放会把交替存放的U、V色度分量相互插值，造成紫绿偏色。
+
+修复后的处理顺序为：
+
+```text
+3840×2160 packed UYVY
+  -> OpenCV COLOR_YUV2BGR_UYVY
+  -> BGR缩放至960×540
+  -> JPEG编码
+  -> MJPEG发布
+```
+
+修复后Sensor8红色货车、Sensor10灰色建筑和Sensor11绿色树木均与上位机
+UYVY源帧颜色一致。颜色回归测试使用饱和红色UYVY块，专门防止再次出现
+“先缩放交错UYVY”的错误。
+
+## 12. 三层验证结论不得混用
+
+- `pcie_uyvy`的lane计数：只能证明服务器持续向XDMA写完整帧；
+- `nvsipl_camera`约30 fps且错误计数为0：证明PCIe→DDR→CSI/GMSL→ICP底层
+  三路链路打通；
+- `img_transfer_v2`约10 fps且画面持续变化：证明ICP帧可被独立应用消费并
+  实时发布MJPEG；
+- 以上结果仍不等于生产`camera_service`的H265发布链已经打通。生产路径需要
+  单独完成NvSciStream/Img2D/编码器验证。
 

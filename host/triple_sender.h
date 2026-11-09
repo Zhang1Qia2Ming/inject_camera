@@ -3,8 +3,10 @@
 #include "frame_buffer.h"
 #include "frame_pacer.h"
 #include "frame_repeater.h"
+#include "synchronized_load_plan.h"
 #include "xdma_h2c.h"
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -80,9 +82,9 @@ inline int run(int argc, char **argv, const FrameFormat &format) {
         "TX1 front far 30deg", "TX2 front wide 120deg",
         "TX4 rear 120deg"};
     const unsigned source_fps[3] = {10, 30, 10};
-    const unsigned repeat_count[3] = {3, 1, 3};
+    const std::array<unsigned, 3> repeat_count = {3, 1, 3};
 
-    std::size_t sizes[3];
+    std::array<std::size_t, 3> sizes{};
     std::size_t total = 0;
     for (int i = 0; i < 3; ++i) {
         sizes[i] = frame_file_size(argv[i + 1]);
@@ -98,18 +100,18 @@ inline int run(int argc, char **argv, const FrameFormat &format) {
     const std::size_t available = mem_available_bytes();
     const std::size_t budget =
         available > reserve ? available - reserve : available / 2;
-    std::size_t caps[3];
-    if (total <= budget) {
-        for (int i = 0; i < 3; ++i)
-            caps[i] = sizes[i];
-    } else {
-        std::cout << "frame files are " << total << " bytes, budget "
-                  << budget << "; loading the same fraction of each lane\n";
-        for (int i = 0; i < 3; ++i) {
-            caps[i] = static_cast<std::size_t>(
-                (static_cast<unsigned __int128>(sizes[i]) * budget) / total);
-        }
+    const SynchronizedLoadPlan load_plan =
+        synchronized_load_plan(sizes, repeat_count, format.frame_bytes, budget);
+    if (!load_plan.valid) {
+        std::cerr << "memory budget cannot hold one synchronized source group\n";
+        return 1;
     }
+    if (total > budget) {
+        std::cout << "frame files are " << total << " bytes, budget "
+                  << budget << "; loading synchronized lane durations\n";
+    }
+    std::cout << "synchronized output cycle: " << load_plan.output_frames
+              << " frames at 30 Hz\n";
 
     std::vector<char> frames[3];
     for (int i = 0; i < 3; ++i) {
@@ -117,7 +119,8 @@ inline int run(int argc, char **argv, const FrameFormat &format) {
                   << format.name << " source " << source_fps[i]
                   << " Hz -> output 30 Hz, repeat " << repeat_count[i]
                   << "x\n";
-        if (!load_frame_file(argv[i + 1], format, caps[i], frames[i]))
+        if (!load_frame_file(argv[i + 1], format,
+                             load_plan.load_bytes[i], frames[i]))
             return 1;
         std::cout << argv[i + 1] << " loaded "
                   << (frames[i].size() / format.frame_bytes) << "/"
